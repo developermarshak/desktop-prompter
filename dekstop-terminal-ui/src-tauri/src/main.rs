@@ -1,0 +1,192 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+use std::collections::HashMap;
+use std::io::{Read, Write};
+use std::process::Command;
+use std::sync::Mutex;
+
+use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use tauri::{Manager, State};
+
+#[derive(serde::Serialize)]
+struct CommandResult {
+  stdout: String,
+  stderr: String,
+  code: i32,
+}
+
+#[derive(Clone, serde::Serialize)]
+struct TerminalOutput {
+  id: String,
+  data: String,
+}
+
+struct PtySession {
+  master: Box<dyn portable_pty::MasterPty + Send>,
+  writer: Box<dyn Write + Send>,
+  child: Box<dyn portable_pty::Child + Send>,
+}
+
+#[derive(Default)]
+struct PtyState {
+  sessions: Mutex<HashMap<String, PtySession>>,
+}
+
+fn shell_command() -> CommandBuilder {
+  if cfg!(target_os = "windows") {
+    CommandBuilder::new("cmd")
+  } else {
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+    CommandBuilder::new(shell)
+  }
+}
+
+#[tauri::command]
+fn run_command(command: String) -> Result<CommandResult, String> {
+  let output = if cfg!(target_os = "windows") {
+    Command::new("cmd")
+      .args(["/C", &command])
+      .output()
+      .map_err(|error| error.to_string())?
+  } else {
+    Command::new("sh")
+      .arg("-c")
+      .arg(&command)
+      .output()
+      .map_err(|error| error.to_string())?
+  };
+
+  Ok(CommandResult {
+    stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+    stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+    code: output.status.code().unwrap_or(-1),
+  })
+}
+
+#[tauri::command]
+fn spawn_pty(id: String, cols: u16, rows: u16, state: State<PtyState>, app: tauri::AppHandle) -> Result<(), String> {
+  {
+    let mut sessions = state.sessions.lock().map_err(|_| "terminal state poisoned")?;
+    if let Some(mut session) = sessions.remove(&id) {
+      let _ = session.child.kill();
+    }
+  }
+
+  let pty_system = native_pty_system();
+  let pair = pty_system
+    .openpty(PtySize {
+      rows,
+      cols,
+      pixel_width: 0,
+      pixel_height: 0,
+    })
+    .map_err(|error| error.to_string())?;
+
+  let mut cmd = shell_command();
+  cmd.env("TERM", "xterm-256color");
+  let home_key = if cfg!(target_os = "windows") { "USERPROFILE" } else { "HOME" };
+  if let Ok(home) = std::env::var(home_key) {
+    cmd.cwd(home);
+  }
+
+  let child = pair
+    .slave
+    .spawn_command(cmd)
+    .map_err(|error| error.to_string())?;
+
+  let mut reader = pair
+    .master
+    .try_clone_reader()
+    .map_err(|error| error.to_string())?;
+  let writer = pair
+    .master
+    .take_writer()
+    .map_err(|error| error.to_string())?;
+
+  let id_clone = id.clone();
+  let app_handle = app.clone();
+  std::thread::spawn(move || {
+    let mut buffer = [0u8; 8192];
+    loop {
+      match reader.read(&mut buffer) {
+        Ok(0) => break,
+        Ok(bytes) => {
+          let data = String::from_utf8_lossy(&buffer[..bytes]).to_string();
+          let _ = app_handle.emit_all(
+            "terminal-output",
+            TerminalOutput {
+              id: id_clone.clone(),
+              data,
+            },
+          );
+        }
+        Err(_) => break,
+      }
+    }
+  });
+
+  let mut sessions = state.sessions.lock().map_err(|_| "terminal state poisoned")?;
+  sessions.insert(
+    id,
+    PtySession {
+      master: pair.master,
+      writer,
+      child,
+    },
+  );
+  Ok(())
+}
+
+#[tauri::command]
+fn write_pty(id: String, data: String, state: State<PtyState>) -> Result<(), String> {
+  let mut sessions = state.sessions.lock().map_err(|_| "terminal state poisoned")?;
+  let session = sessions.get_mut(&id).ok_or("missing terminal session")?;
+  session
+    .writer
+    .write_all(data.as_bytes())
+    .map_err(|error| error.to_string())?;
+  session
+    .writer
+    .flush()
+    .map_err(|error| error.to_string())?;
+  Ok(())
+}
+
+#[tauri::command]
+fn resize_pty(id: String, cols: u16, rows: u16, state: State<PtyState>) -> Result<(), String> {
+  let mut sessions = state.sessions.lock().map_err(|_| "terminal state poisoned")?;
+  let session = sessions.get_mut(&id).ok_or("missing terminal session")?;
+  session
+    .master
+    .resize(PtySize {
+      rows,
+      cols,
+      pixel_width: 0,
+      pixel_height: 0,
+    })
+    .map_err(|error| error.to_string())?;
+  Ok(())
+}
+
+#[tauri::command]
+fn close_pty(id: String, state: State<PtyState>) -> Result<(), String> {
+  let mut sessions = state.sessions.lock().map_err(|_| "terminal state poisoned")?;
+  if let Some(mut session) = sessions.remove(&id) {
+    let _ = session.child.kill();
+  }
+  Ok(())
+}
+
+fn main() {
+  tauri::Builder::default()
+    .manage(PtyState::default())
+    .invoke_handler(tauri::generate_handler![
+      run_command,
+      spawn_pty,
+      write_pty,
+      resize_pty,
+      close_pty
+    ])
+    .run(tauri::generate_context!())
+    .expect("error while running tauri application")
+}

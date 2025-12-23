@@ -1,0 +1,21 @@
+# PTY command permissions for the app.
+
+[[permission]]
+identifier = "allow-spawn-pty"
+description = "Enables the spawn_pty command without any pre-configured scope."
+commands.allow = ["spawn_pty"]
+
+[[permission]]
+identifier = "allow-write-pty"
+description = "Enables the write_pty command without any pre-configured scope."
+commands.allow = ["write_pty"]
+
+[[permission]]
+identifier = "allow-resize-pty"
+description = "Enables the resize_pty command without any pre-configured scope."
+commands.allow = ["resize_pty"]
+
+[[permission]]
+identifier = "allow-close-pty"
+description = "Enables the close_pty command without any pre-configured scope."
+commands.allow = ["close_pty"]

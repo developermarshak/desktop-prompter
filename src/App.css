@@ -1,0 +1,70 @@
+:root {
+  font-family: "JetBrains Mono", "SFMono-Regular", ui-monospace, monospace;
+  background: radial-gradient(circle at 20% 20%, rgba(88, 166, 255, 0.08), transparent 25%),
+    radial-gradient(circle at 80% 0%, rgba(56, 139, 253, 0.06), transparent 22%),
+    #05070f;
+  color: #e6edf3;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 28px 18px 32px;
+}
+
+.header {
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+.title {
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 700;
+}
+
+.subtitle {
+  color: #8ca0c6;
+  margin-top: 4px;
+}
+
+.terminal-card {
+  width: min(1100px, 96vw);
+  background: linear-gradient(135deg, rgba(26, 34, 52, 0.8), rgba(14, 18, 30, 0.92));
+  border: 1px solid #1e2a43;
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+}
+
+.terminal {
+  height: 520px;
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+@media (max-width: 600px) {
+  .terminal-card {
+    padding: 10px;
+  }
+
+  .terminal {
+    height: 420px;
+  }
+}
