@@ -1,0 +1,191 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create-release.outputs.id }}
+      release_upload_url: ${{ steps.create-release.outputs.upload_url }}
+      release_body: ${{ steps.release-notes.outputs.body }}
+      version: ${{ steps.get-version.outputs.VERSION }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version from tag
+        id: get-version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        id: release-notes
+        run: |
+          # Get previous tag
+          PREVIOUS_TAG=$(git describe --abbrev=0 --tags $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
+
+          # Generate changelog
+          if [ -n "$PREVIOUS_TAG" ]; then
+            CHANGELOG=$(git log $PREVIOUS_TAG..HEAD --pretty=format:"- %s" --no-merges)
+          else
+            CHANGELOG=$(git log --pretty=format:"- %s" --no-merges)
+          fi
+
+          # Create release body
+          BODY="## What's Changed
+
+          $CHANGELOG
+
+          ## Installation
+
+          ### macOS
+          1. Download the appropriate DMG for your Mac:
+             - Apple Silicon (M1/M2/M3): \`desktop-prompter_${{ steps.get-version.outputs.VERSION }}_aarch64-apple-darwin.dmg\`
+             - Intel: \`desktop-prompter_${{ steps.get-version.outputs.VERSION }}_x86_64-apple-darwin.dmg\`
+          2. Open the DMG and drag the app to Applications
+          3. Right-click and select 'Open' (first time only, due to Gatekeeper)
+
+          ### Auto-Update
+          If you already have desktop-prompter installed, it will automatically check for updates and prompt you to install this version.
+
+          ---
+
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/$PREVIOUS_TAG...v${{ steps.get-version.outputs.VERSION }}"
+
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: create-release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ steps.get-version.outputs.VERSION }}
+          body: ${{ steps.release-notes.outputs.body }}
+          draft: false
+          prerelease: false
+
+  build-tauri:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            rust_target: aarch64-apple-darwin
+            arch: aarch64
+          - os: macos-latest
+            rust_target: x86_64-apple-darwin
+            arch: x86_64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Tauri App
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npm run tauri build -- --target ${{ matrix.rust_target }}
+
+      - name: Upload Release Assets (macOS DMG)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.release_upload_url }}
+          asset_path: ./src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg/desktop-prompter_${{ needs.create-release.outputs.version }}_${{ matrix.arch }}.dmg
+          asset_name: desktop-prompter_${{ needs.create-release.outputs.version }}_${{ matrix.rust_target }}.dmg
+          asset_content_type: application/x-apple-diskimage
+
+      - name: Upload Release Assets (macOS DMG Signature)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.release_upload_url }}
+          asset_path: ./src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg/desktop-prompter_${{ needs.create-release.outputs.version }}_${{ matrix.arch }}.dmg.sig
+          asset_name: desktop-prompter_${{ needs.create-release.outputs.version }}_${{ matrix.rust_target }}.dmg.sig
+          asset_content_type: text/plain
+
+  publish-release:
+    needs: [create-release, build-tauri]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Get signatures
+        id: get-sigs
+        run: |
+          VERSION="${{ needs.create-release.outputs.version }}"
+
+          # Download signatures from release
+          curl -L -o aarch64.dmg.sig "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/desktop-prompter_${VERSION}_aarch64-apple-darwin.dmg.sig"
+          curl -L -o x86_64.dmg.sig "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/desktop-prompter_${VERSION}_x86_64-apple-darwin.dmg.sig"
+
+          AARCH64_SIG=$(cat aarch64.dmg.sig)
+          X86_64_SIG=$(cat x86_64.dmg.sig)
+
+          echo "aarch64_sig=$AARCH64_SIG" >> $GITHUB_OUTPUT
+          echo "x86_64_sig=$X86_64_SIG" >> $GITHUB_OUTPUT
+
+      - name: Generate updater JSON
+        run: |
+          VERSION="${{ needs.create-release.outputs.version }}"
+
+          cat > latest.json << EOF
+          {
+            "version": "v${VERSION}",
+            "notes": "See release notes for details",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "darwin-aarch64": {
+                "signature": "${{ steps.get-sigs.outputs.aarch64_sig }}",
+                "url": "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/desktop-prompter_${VERSION}_aarch64-apple-darwin.dmg"
+              },
+              "darwin-x86_64": {
+                "signature": "${{ steps.get-sigs.outputs.x86_64_sig }}",
+                "url": "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/desktop-prompter_${VERSION}_x86_64-apple-darwin.dmg"
+              }
+            }
+          }
+          EOF
+
+      - name: Upload latest.json
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.release_upload_url }}
+          asset_path: ./latest.json
+          asset_name: latest.json
+          asset_content_type: application/json

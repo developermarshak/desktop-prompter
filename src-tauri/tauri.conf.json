@@ -30,6 +30,17 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "macOS": {
+      "minimumSystemVersion": "10.13"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/developermarshak/desktop-prompter/releases/latest/download/latest.json"
+      ],
+      "pubkey": "PLACEHOLDER_PUBLIC_KEY_TO_BE_GENERATED"
+    }
   }
 }

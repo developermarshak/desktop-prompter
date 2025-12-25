@@ -26,6 +26,7 @@ import { Group, Panel as ResizablePanel, Separator } from "react-resizable-panel
 import { usePanelContext } from "./contexts/PanelContext";
 import { CLIStatusTracker } from "./utils/cliStatusDetector";
 import { IndicationLogsPanel } from "./components/IndicationLogsPanel";
+import { UpdaterDialog } from "./components/UpdaterDialog";
 import {
   loadCliStatusLogs,
   saveCliStatusLogs,
@@ -1046,6 +1047,7 @@ How can I improve this snippet?`;
         )}
       </Group>
 
+      {import.meta.env.PROD && <UpdaterDialog checkOnMount={true} />}
     </div>
   );
 };
