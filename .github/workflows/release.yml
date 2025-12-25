@@ -84,9 +84,11 @@ jobs:
           - os: macos-latest
             rust_target: aarch64-apple-darwin
             arch: aarch64
+            tauri_arch: aarch64
           - os: macos-latest
             rust_target: x86_64-apple-darwin
             arch: x86_64
+            tauri_arch: x64
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -123,7 +125,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.release_upload_url }}
-          asset_path: ./src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg/desktop-prompter_${{ needs.create-release.outputs.version }}_${{ matrix.arch }}.dmg
+          asset_path: ./src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg/desktop-prompter_${{ needs.create-release.outputs.version }}_${{ matrix.tauri_arch }}.dmg
           asset_name: desktop-prompter_${{ needs.create-release.outputs.version }}_${{ matrix.rust_target }}.dmg
           asset_content_type: application/x-apple-diskimage
 
@@ -133,7 +135,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.release_upload_url }}
-          asset_path: ./src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg/desktop-prompter_${{ needs.create-release.outputs.version }}_${{ matrix.arch }}.dmg.sig
+          asset_path: ./src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg/desktop-prompter_${{ needs.create-release.outputs.version }}_${{ matrix.tauri_arch }}.dmg.sig
           asset_name: desktop-prompter_${{ needs.create-release.outputs.version }}_${{ matrix.rust_target }}.dmg.sig
           asset_content_type: text/plain
 
