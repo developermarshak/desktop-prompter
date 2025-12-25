@@ -129,15 +129,16 @@ jobs:
           asset_name: desktop-prompter_${{ needs.create-release.outputs.version }}_${{ matrix.rust_target }}.dmg
           asset_content_type: application/x-apple-diskimage
 
-      - name: Upload Release Assets (macOS DMG Signature)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.release_upload_url }}
-          asset_path: ./src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg/desktop-prompter_${{ needs.create-release.outputs.version }}_${{ matrix.tauri_arch }}.dmg.sig
-          asset_name: desktop-prompter_${{ needs.create-release.outputs.version }}_${{ matrix.rust_target }}.dmg.sig
-          asset_content_type: text/plain
+      # Signature upload temporarily disabled - signatures not being generated
+      # - name: Upload Release Assets (macOS DMG Signature)
+      #   uses: actions/upload-release-asset@v1
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #   with:
+      #     upload_url: ${{ needs.create-release.outputs.release_upload_url }}
+      #     asset_path: ./src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg/desktop-prompter_${{ needs.create-release.outputs.version }}_${{ matrix.tauri_arch }}.dmg.sig
+      #     asset_name: desktop-prompter_${{ needs.create-release.outputs.version }}_${{ matrix.rust_target }}.dmg.sig
+      #     asset_content_type: text/plain
 
   publish-release:
     needs: [create-release, build-tauri]
@@ -145,23 +146,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download all artifacts
-        uses: actions/download-artifact@v3
+      # Signatures temporarily disabled
+      # - name: Download all artifacts
+      #   uses: actions/download-artifact@v3
 
-      - name: Get signatures
-        id: get-sigs
-        run: |
-          VERSION="${{ needs.create-release.outputs.version }}"
-
-          # Download signatures from release
-          curl -L -o aarch64.dmg.sig "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/desktop-prompter_${VERSION}_aarch64-apple-darwin.dmg.sig"
-          curl -L -o x86_64.dmg.sig "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/desktop-prompter_${VERSION}_x86_64-apple-darwin.dmg.sig"
-
-          AARCH64_SIG=$(cat aarch64.dmg.sig)
-          X86_64_SIG=$(cat x86_64.dmg.sig)
-
-          echo "aarch64_sig=$AARCH64_SIG" >> $GITHUB_OUTPUT
-          echo "x86_64_sig=$X86_64_SIG" >> $GITHUB_OUTPUT
+      # - name: Get signatures
+      #   id: get-sigs
+      #   run: |
+      #     VERSION="${{ needs.create-release.outputs.version }}"
+      #     curl -L -o aarch64.dmg.sig "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/desktop-prompter_${VERSION}_aarch64-apple-darwin.dmg.sig"
+      #     curl -L -o x86_64.dmg.sig "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/desktop-prompter_${VERSION}_x86_64-apple-darwin.dmg.sig"
+      #     AARCH64_SIG=$(cat aarch64.dmg.sig)
+      #     X86_64_SIG=$(cat x86_64.dmg.sig)
+      #     echo "aarch64_sig=$AARCH64_SIG" >> $GITHUB_OUTPUT
+      #     echo "x86_64_sig=$X86_64_SIG" >> $GITHUB_OUTPUT
 
       - name: Generate updater JSON
         run: |
@@ -174,11 +172,9 @@ jobs:
             "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "platforms": {
               "darwin-aarch64": {
-                "signature": "${{ steps.get-sigs.outputs.aarch64_sig }}",
                 "url": "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/desktop-prompter_${VERSION}_aarch64-apple-darwin.dmg"
               },
               "darwin-x86_64": {
-                "signature": "${{ steps.get-sigs.outputs.x86_64_sig }}",
                 "url": "https://github.com/${{ github.repository }}/releases/download/v${VERSION}/desktop-prompter_${VERSION}_x86_64-apple-darwin.dmg"
               }
             }
