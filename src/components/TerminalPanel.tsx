@@ -4,13 +4,20 @@ import { listen } from "@tauri-apps/api/event";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal, type IDisposable } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { TerminalTab } from "../types";
+import { TerminalTab, CLIStatus } from "../types";
 import { drainTerminalWrites, subscribeTerminalQueue } from "../terminalQueue";
+import { ExternalLink } from "lucide-react";
 
 type TerminalPanelProps = {
   className?: string;
   tabs: TerminalTab[];
   activeTabId: string | null;
+  onPopOut?: () => void;
+  onToggleLogs?: () => void;
+  logsOpen?: boolean;
+  isDetached?: boolean;
+  onTerminalOutput?: (tabId: string, data: string) => void;
+  cliStatus?: CLIStatus;
 };
 
 type TerminalOutputPayload = {
@@ -33,6 +40,10 @@ const theme = {
   cursor: "#58a6ff",
 };
 
+const DEFAULT_FONT_SIZE = 13;
+const MIN_FONT_SIZE = 9;
+const MAX_FONT_SIZE = 22;
+
 const fontFamily =
   "'JetBrains Mono', 'SFMono-Regular', ui-monospace, monospace";
 
@@ -42,6 +53,12 @@ export const TerminalPanel = ({
   className,
   tabs,
   activeTabId,
+  onPopOut,
+  onToggleLogs,
+  logsOpen = false,
+  isDetached = false,
+  onTerminalOutput,
+  cliStatus = 'question',
 }: TerminalPanelProps) => {
   const effectiveActiveTabId = activeTabId ?? tabs[0]?.id ?? null;
   const containersRef = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -87,6 +104,25 @@ export const TerminalPanel = ({
     }
   }, []);
 
+  const adjustFontSize = useCallback((id: string, delta: number) => {
+    const session = sessionsRef.current.get(id);
+    if (!session) {
+      return;
+    }
+    const current = session.term.options.fontSize ?? DEFAULT_FONT_SIZE;
+    const next = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, current + delta));
+    if (next === current) {
+      return;
+    }
+    session.term.options.fontSize = next;
+    session.fit.fit();
+    if (session.ptyReady) {
+      invoke("resize_pty", { id, cols: session.term.cols, rows: session.term.rows }).catch(
+        () => undefined,
+      );
+    }
+  }, []);
+
   const createSession = useCallback(
     async (id: string, container: HTMLDivElement) => {
       if (!runningInTauri || sessionsRef.current.has(id)) {
@@ -97,7 +133,7 @@ export const TerminalPanel = ({
         cursorBlink: true,
         convertEol: true,
         fontFamily,
-        fontSize: 13,
+        fontSize: DEFAULT_FONT_SIZE,
         theme,
         scrollback: 2000,
       });
@@ -115,6 +151,23 @@ export const TerminalPanel = ({
         dispose: () => undefined,
       };
       sessionsRef.current.set(id, session);
+
+      term.attachCustomKeyEventHandler((event) => {
+        if (event.type !== "keydown") {
+          return true;
+        }
+        if (event.metaKey && !event.ctrlKey && !event.altKey) {
+          if (event.key === "+" || event.key === "=") {
+            adjustFontSize(id, 1);
+            return false;
+          }
+          if (event.key === "-" || event.key === "_") {
+            adjustFontSize(id, -1);
+            return false;
+          }
+        }
+        return true;
+      });
 
       const resizeToFit = () => {
         fit.fit();
@@ -157,7 +210,7 @@ export const TerminalPanel = ({
         term.writeln(`\r\n[failed to start shell] ${String(error)}`);
       }
     },
-    [flushPendingOutput, flushQueuedWrites, runningInTauri],
+    [adjustFontSize, flushPendingOutput, flushQueuedWrites, runningInTauri],
   );
 
   useEffect(() => {
@@ -169,6 +222,13 @@ export const TerminalPanel = ({
 
     listen<TerminalOutputPayload>("terminal-output", (event) => {
       writeOutput(event.payload.id, event.payload.data);
+      if (event.payload.data) {
+        try {
+          onTerminalOutput?.(event.payload.id, event.payload.data);
+        } catch (error) {
+          console.error("Error in terminal output callback:", error);
+        }
+      }
     })
       .then((stop) => {
         if (cancelled) {
@@ -185,7 +245,7 @@ export const TerminalPanel = ({
         unlisten();
       }
     };
-  }, [runningInTauri, writeOutput]);
+  }, [onTerminalOutput, runningInTauri, writeOutput]);
 
   useEffect(() => {
     if (!runningInTauri) {
@@ -257,11 +317,51 @@ export const TerminalPanel = ({
     [className],
   );
 
+  const statusColors: Record<CLIStatus, string> = {
+    idle: 'bg-yellow-500',
+    working: 'bg-blue-500 animate-pulse',
+    question: 'bg-yellow-500 animate-pulse',
+    done: 'bg-green-500',
+  };
+
+  const statusTitles: Record<CLIStatus, string> = {
+    idle: 'CLI waiting for input',
+    working: 'CLI working...',
+    question: 'CLI waiting for input',
+    done: 'CLI task completed',
+  };
+
   return (
     <div className={containerClassName}>
-      <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900 px-4 py-2">
-        <div className="text-sm font-semibold text-zinc-200">Terminal</div>
-        <div className="text-xs text-zinc-500">Desktop PTY</div>
+      <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900 px-3 py-1.5">
+        <div className="flex items-center gap-1.5">
+          <div className="text-xs font-semibold text-zinc-200">Terminal</div>
+          <div
+            className={`w-2 h-2 ${statusColors[cliStatus]}`}
+            title={statusTitles[cliStatus]}
+          />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="text-[10px] text-zinc-500">Desktop PTY</div>
+          {onToggleLogs && (
+            <button
+              onClick={onToggleLogs}
+              className="px-2 py-0.5 text-[10px] text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+              title={logsOpen ? 'Hide indication logs' : 'Show indication logs'}
+            >
+              Logs
+            </button>
+          )}
+          {runningInTauri && !isDetached && onPopOut && (
+            <button
+              onClick={onPopOut}
+              className="p-1 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+              title="Open in new window"
+            >
+              <ExternalLink size={12} />
+            </button>
+          )}
+        </div>
       </div>
       <div className="relative flex-1 bg-black">
         {!runningInTauri ? (

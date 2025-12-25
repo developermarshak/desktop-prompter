@@ -5,7 +5,7 @@ use std::{
     io::{Read, Write},
     sync::Mutex,
 };
-use tauri::{Emitter, State};
+use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 #[derive(Clone, Serialize)]
 struct TerminalOutput {
@@ -176,6 +176,46 @@ fn close_pty(id: String, state: State<PtyState>) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn create_panel_window(
+    app: tauri::AppHandle,
+    panel_id: String,
+    title: String,
+    width: f64,
+    height: f64,
+    x: Option<f64>,
+    y: Option<f64>,
+) -> Result<(), String> {
+    let label = format!("panel-{}", panel_id);
+    let url = format!("index.html?panel={}", panel_id);
+
+    let mut builder = WebviewWindowBuilder::new(
+        &app,
+        &label,
+        WebviewUrl::App(url.into()),
+    )
+    .title(&title)
+    .inner_size(width, height)
+    .decorations(true)
+    .resizable(true);
+
+    if let (Some(x), Some(y)) = (x, y) {
+        builder = builder.position(x, y);
+    }
+
+    builder.build().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn close_panel_window(app: tauri::AppHandle, panel_id: String) -> Result<(), String> {
+    let label = format!("panel-{}", panel_id);
+    if let Some(window) = app.get_webview_window(&label) {
+        window.close().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -186,7 +226,9 @@ pub fn run() {
             spawn_pty,
             write_pty,
             resize_pty,
-            close_pty
+            close_pty,
+            create_panel_window,
+            close_panel_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

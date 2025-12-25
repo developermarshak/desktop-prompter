@@ -25,9 +25,7 @@ export const useToolIntegration = ({
 }: UseToolIntegrationProps) => {
   const [showRunDropdown, setShowRunDropdown] = useState(false);
   const [showDirectoryModal, setShowDirectoryModal] = useState(false);
-  const [selectedTool, setSelectedTool] = useState<
-    'aider' | 'cloud-code' | 'cursor' | 'codex' | 'terminal' | null
-  >(null);
+  const [selectedTool, setSelectedTool] = useState<'terminal' | null>(null);
   const [selectedDirectory, setSelectedDirectory] = useState<string>('');
   const runDropdownRef = useRef<HTMLDivElement>(null);
   const directoryInputRef = useRef<HTMLInputElement>(null);
@@ -96,7 +94,6 @@ export const useToolIntegration = ({
     return `cd ${shellEscape(cwd)}\n${baseCommand}`;
   };
 
-  // Load saved directory from localStorage
   useEffect(() => {
     const savedDir = localStorage.getItem('promptArchitect_selectedDirectory');
     if (savedDir) {
@@ -104,14 +101,12 @@ export const useToolIntegration = ({
     }
   }, []);
 
-  // Save directory to localStorage
   useEffect(() => {
     if (selectedDirectory) {
       localStorage.setItem('promptArchitect_selectedDirectory', selectedDirectory);
     }
   }, [selectedDirectory]);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (runDropdownRef.current && !runDropdownRef.current.contains(event.target as Node)) {
@@ -125,17 +120,15 @@ export const useToolIntegration = ({
     }
   }, [showRunDropdown]);
 
-  const handleRunWithTool = (
-    tool: 'aider' | 'cloud-code' | 'cursor' | 'codex' | 'terminal'
-  ) => {
+  const handleRunWithTool = () => {
     const resolvedContent = resolvePromptRefs(value, templates, savedPrompts);
-    
+
     if (!resolvedContent.trim()) {
       alert('Please write a prompt first.');
       return;
     }
 
-    setSelectedTool(tool);
+    setSelectedTool('terminal');
     setShowRunDropdown(false);
     setShowDirectoryModal(true);
   };
@@ -184,85 +177,34 @@ export const useToolIntegration = ({
     const dir = selectedDirectory.trim();
     const runningInTauri = isTauri();
 
-    if (selectedTool === 'terminal') {
-      if (!runningInTauri) {
-        alert('Terminal execution is only available in the Tauri app.');
-        setShowDirectoryModal(false);
-        setSelectedTool(null);
-        return;
-      }
-      if (!terminalTabId) {
-        alert('Select a terminal tab first.');
-        setShowDirectoryModal(false);
-        setSelectedTool(null);
-        return;
-      }
-
-      try {
-        onRunInTerminal?.();
-        await new Promise((resolve) => setTimeout(resolve, 60));
-        const command = buildCodexCommand(resolvedContent, dir, true);
-        enqueueTerminalWrite(terminalTabId, `${command}\n`);
-        if (effectiveCodexSettings.runMode === 'tui' && resolvedContent.trim()) {
-          enqueueTerminalWrite(terminalTabId, `${resolvedContent}\n`, 300);
-        }
-      } catch (error) {
-        console.error('Failed to run prompt in terminal:', error);
-        alert('Failed to send prompt to the terminal.');
-      } finally {
-        setShowDirectoryModal(false);
-        setSelectedTool(null);
-      }
+    if (!runningInTauri) {
+      alert('Terminal execution is only available in the Tauri app.');
+      setShowDirectoryModal(false);
+      setSelectedTool(null);
       return;
     }
 
-    // Copy prompt for external tools (no backend execution)
-    let textToCopy = resolvedContent;
-
-    switch (selectedTool) {
-      case 'aider':
-        textToCopy =
-          resolvedContent + (dir ? `\n\n# Run in directory: ${dir}` : '');
-        break;
-      case 'cloud-code':
-        textToCopy =
-          resolvedContent +
-          (dir ? `\n\n<!-- Working Directory: ${dir} -->` : '');
-        break;
-      case 'cursor':
-        textToCopy =
-          resolvedContent + (dir ? `\n\n[Directory: ${dir}]` : '');
-        break;
-      case 'codex':
-        textToCopy =
-          resolvedContent + (dir ? `\n\n[Working Directory: ${dir}]` : '');
-        break;
+    if (!terminalTabId) {
+      alert('Select a terminal tab first.');
+      setShowDirectoryModal(false);
+      setSelectedTool(null);
+      return;
     }
 
     try {
-      await navigator.clipboard.writeText(textToCopy);
+      onRunInTerminal?.();
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      const command = buildCodexCommand(resolvedContent, dir, true);
+      enqueueTerminalWrite(terminalTabId, `${command}\n`);
+      if (effectiveCodexSettings.runMode === 'tui' && resolvedContent.trim()) {
+        enqueueTerminalWrite(terminalTabId, `${resolvedContent}\n`, 300);
+      }
+    } catch (error) {
+      console.error('Failed to run prompt in terminal:', error);
+      alert('Failed to send prompt to the terminal.');
+    } finally {
       setShowDirectoryModal(false);
       setSelectedTool(null);
-      
-      const toolNames: Record<string, string> = {
-        'aider': 'Aider',
-        'cloud-code': 'Cloud Code',
-        'cursor': 'Cursor',
-        'codex': 'Codex',
-        'terminal': 'Terminal'
-      };
-      
-      const notification = document.createElement('div');
-      const dirInfo = dir ? ` (dir: ${dir})` : '';
-      notification.textContent = `Prompt copied for ${toolNames[selectedTool]}!${dirInfo}`;
-      notification.className = 'fixed top-4 right-4 bg-emerald-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-in fade-in slide-in-from-top-2';
-      document.body.appendChild(notification);
-      setTimeout(() => {
-        notification.remove();
-      }, 3000);
-    } catch (error) {
-      console.error('Failed to copy:', error);
-      alert('Failed to copy prompt to clipboard.');
     }
   };
 

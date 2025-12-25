@@ -2,10 +2,18 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { PromptEditor } from "./components/PromptEditor";
 import { ChatAssistant } from "./components/ChatAssistant";
-import { PromptTemplate, SavedPrompt, ChatMessage, TerminalTab } from "./types";
+import {
+  PromptTemplate,
+  SavedPrompt,
+  ChatMessage,
+  TerminalTab,
+  CLIStatus,
+  CLIStatusDetection,
+  CLIStatusLogEntry,
+} from "./types";
 import { createChatSession, sendMessageStream } from "./services/geminiService";
 import { Chat } from "@google/genai";
-import { Menu, X, FileBadge } from "lucide-react";
+import { Menu } from "lucide-react";
 import { resolvePromptRefs, generateTitleFromContent } from "./utils";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { CodexSettingsPanel } from "./components/CodexSettings";
@@ -14,6 +22,16 @@ import {
   coerceCodexSettings,
 } from "./codexSettings";
 import { CodexSettings } from "./types";
+import { Group, Panel as ResizablePanel, Separator } from "react-resizable-panels";
+import { usePanelContext } from "./contexts/PanelContext";
+import { CLIStatusTracker } from "./utils/cliStatusDetector";
+import { IndicationLogsPanel } from "./components/IndicationLogsPanel";
+import {
+  loadCliStatusLogs,
+  saveCliStatusLogs,
+  trimCliStatusLogs,
+  truncateLogText,
+} from "./utils/cliStatusLogs";
 
 // Default Templates
 const DEFAULT_TEMPLATES: PromptTemplate[] = [
@@ -92,6 +110,16 @@ const App: React.FC = () => {
   const [activeTerminalTabId, setActiveTerminalTabId] = useState<string | null>(
     null
   );
+  const [terminalWaitingTabs, setTerminalWaitingTabs] = useState<Set<string>>(
+    new Set()
+  );
+  const [terminalCLIStatus, setTerminalCLIStatus] = useState<Map<string, CLIStatus>>(
+    new Map()
+  );
+  const [indicationLogsOpen, setIndicationLogsOpen] = useState(false);
+  const [cliStatusLogs, setCliStatusLogs] = useState<CLIStatusLogEntry[]>(() =>
+    loadCliStatusLogs()
+  );
   const [activeView, setActiveView] = useState<"editor" | "settings">("editor");
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">(
     "saved"
@@ -106,19 +134,103 @@ const App: React.FC = () => {
   const [draftTitle, setDraftTitle] = useState<string>("");
   const [isTemplate, setIsTemplate] = useState<boolean>(false);
 
-  // Modal State
-  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
-  const [savePromptTitle, setSavePromptTitle] = useState("");
-
   // Refs
   const chatSessionRef = useRef<Chat | null>(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cliStatusTrackersRef = useRef<Map<string, CLIStatusTracker>>(new Map());
 
   useEffect(() => {
     if (!activeTerminalTabId && terminalTabs.length > 0) {
       setActiveTerminalTabId(terminalTabs[0].id);
     }
   }, [activeTerminalTabId, terminalTabs]);
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === 'promptArchitect_cliStatusLogs') {
+        setCliStatusLogs(loadCliStatusLogs());
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  const handleCLIDetection = useCallback(
+    (tabId: string, detection: CLIStatusDetection) => {
+      const shouldLog =
+        detection.reason !== 'carryover' ||
+        detection.status !== detection.previousStatus;
+
+      if (!shouldLog) {
+        return;
+      }
+
+      const entry: CLIStatusLogEntry = {
+        ...detection,
+        id: crypto.randomUUID(),
+        tabId,
+        timestamp: Date.now(),
+        statusChanged: detection.status !== detection.previousStatus,
+        lastLine: truncateLogText(detection.lastLine, 400),
+        recentOutput: truncateLogText(detection.recentOutput, 1200),
+      };
+
+      setCliStatusLogs((prev) => {
+        const next = trimCliStatusLogs([entry, ...prev]);
+        saveCliStatusLogs(next);
+        return next;
+      });
+    },
+    []
+  );
+
+  // Manage CLI Status Trackers for each terminal tab
+  useEffect(() => {
+    const currentTrackers = cliStatusTrackersRef.current;
+    const currentTabIds = new Set(terminalTabs.map(tab => tab.id));
+
+    // Remove trackers for deleted tabs
+    currentTrackers.forEach((tracker, tabId) => {
+      if (!currentTabIds.has(tabId)) {
+        tracker.destroy();
+        currentTrackers.delete(tabId);
+        setTerminalCLIStatus(prev => {
+          const next = new Map(prev);
+          next.delete(tabId);
+          return next;
+        });
+      }
+    });
+
+    // Create trackers for new tabs
+    terminalTabs.forEach(tab => {
+      if (!currentTrackers.has(tab.id)) {
+        const tracker = new CLIStatusTracker(
+          (status) => {
+            setTerminalCLIStatus(prev => {
+              const next = new Map(prev);
+              next.set(tab.id, status);
+              return next;
+            });
+          },
+          (detection) => handleCLIDetection(tab.id, detection),
+        );
+        currentTrackers.set(tab.id, tracker);
+        setTerminalCLIStatus(prev => {
+          const next = new Map(prev);
+          next.set(tab.id, 'question');
+          return next;
+        });
+      }
+    });
+
+    return () => {
+      // Cleanup on unmount
+      currentTrackers.forEach(tracker => tracker.destroy());
+      currentTrackers.clear();
+    };
+  }, [handleCLIDetection, terminalTabs]);
 
   // Initial Load
   useEffect(() => {
@@ -282,6 +394,27 @@ const App: React.FC = () => {
     );
   }, [codexSettings]);
 
+  const createNewPrompt = useCallback((content: string, title?: string) => {
+    const resolvedTitle =
+      title?.trim() ||
+      (content.trim().length > 0
+        ? generateTitleFromContent(content)
+        : "Untitled Prompt");
+    const newId = crypto.randomUUID();
+    const newPrompt: SavedPrompt = {
+      id: newId,
+      title: resolvedTitle,
+      content,
+      updatedAt: Date.now(),
+    };
+    setSavedPrompts((prev) => [newPrompt, ...prev]);
+    setActivePromptId(newId);
+    setActiveTemplateId(null);
+    setIsTemplate(false);
+    setDraftTitle(resolvedTitle);
+    setSaveStatus("saved");
+  }, []);
+
   // Autosave Draft (Local Work in Progress) & Continuous Save for Existing Prompts
   useEffect(() => {
     // Always save draft state to LS immediately
@@ -358,8 +491,10 @@ const App: React.FC = () => {
 
         setSaveStatus("saved");
       }, 1000);
+    } else if (!isTemplate && promptContent.trim().length > 0) {
+      createNewPrompt(promptContent);
     } else {
-      setSaveStatus(promptContent.length > 0 ? "unsaved" : "saved");
+      setSaveStatus("saved");
     }
 
     return () => {
@@ -371,6 +506,7 @@ const App: React.FC = () => {
     activeTemplateId,
     draftTitle,
     isTemplate,
+    createNewPrompt,
   ]);
 
   const mergedDefaultTemplates = DEFAULT_TEMPLATES.filter(
@@ -388,19 +524,49 @@ const App: React.FC = () => {
     setTerminalOpen(true);
   };
 
-  const handleNewTerminalTab = () => {
-    setTerminalTabs((prev) => {
-      const newTab: TerminalTab = {
-        id: crypto.randomUUID(),
-        title: `Terminal ${prev.length + 1}`,
-      };
-      setActiveTerminalTabId(newTab.id);
-      return [...prev, newTab];
+  const clearTerminalWaiting = useCallback((tabId: string) => {
+    setTerminalWaitingTabs((prev) => {
+      if (!prev.has(tabId)) {
+        return prev;
+      }
+      const next = new Set(prev);
+      next.delete(tabId);
+      return next;
     });
+  }, []);
+
+  const handleTerminalOutput = useCallback((tabId: string, data: string) => {
+    // Clear the waiting indicator
+    clearTerminalWaiting(tabId);
+
+    // Feed output to CLI status tracker
+    const tracker = cliStatusTrackersRef.current.get(tabId);
+    if (tracker) {
+      tracker.addOutput(data);
+    } else {
+      console.warn(`No CLI status tracker found for tab ${tabId}`);
+    }
+  }, [clearTerminalWaiting]);
+
+  const handleNewTerminalTab = () => {
+    const newTab: TerminalTab = {
+      id: crypto.randomUUID(),
+      title: `Terminal ${terminalTabs.length + 1}`,
+    };
+    setTerminalTabs((prev) => [...prev, newTab]);
+    setActiveTerminalTabId(newTab.id);
     setTerminalOpen(true);
   };
 
   const handleCloseTerminalTab = (tabId: string) => {
+    setTerminalWaitingTabs((prev) => {
+      if (!prev.has(tabId)) {
+        return prev;
+      }
+      const next = new Set(prev);
+      next.delete(tabId);
+      return next;
+    });
     setTerminalTabs((prev) => {
       const nextTabs = prev.filter((tab) => tab.id !== tabId);
       if (nextTabs.length === 0) {
@@ -479,87 +645,6 @@ const App: React.FC = () => {
     }
   };
 
-  const handleOpenSaveModal = () => {
-    const current = savedPrompts.find((p) => p.id === activePromptId);
-    const titleToUse = current
-      ? current.title
-      : draftTitle || generateTitleFromContent(promptContent);
-    setSavePromptTitle(titleToUse);
-    setIsSaveModalOpen(true);
-  };
-
-  const executeSave = () => {
-    const titleToUse =
-      savePromptTitle.trim() || generateTitleFromContent(promptContent);
-
-    if (activePromptId) {
-      // Update existing prompt (Manual Trigger just updates title/content again to be safe)
-      setSavedPrompts((prev) =>
-        prev.map((p) =>
-          p.id === activePromptId
-            ? {
-                ...p,
-                title: titleToUse,
-                content: promptContent,
-                updatedAt: Date.now(),
-              }
-            : p
-        )
-      );
-    } else {
-      // Create new prompt
-      const newId = crypto.randomUUID();
-      const newPrompt: SavedPrompt = {
-        id: newId,
-        title: titleToUse,
-        content: promptContent,
-        updatedAt: Date.now(),
-      };
-      setSavedPrompts((prev) => [newPrompt, ...prev]);
-      setActivePromptId(newId);
-    }
-    setActiveTemplateId(null);
-    setIsTemplate(false);
-    setSaveStatus("saved");
-    setIsSaveModalOpen(false);
-  };
-
-  const handleSaveAsNew = () => {
-    const titleToUse =
-      savePromptTitle.trim() || generateTitleFromContent(promptContent);
-
-    const newId = crypto.randomUUID();
-    const newPrompt: SavedPrompt = {
-      id: newId,
-      title: titleToUse,
-      content: promptContent,
-      updatedAt: Date.now(),
-    };
-    setSavedPrompts((prev) => [newPrompt, ...prev]);
-    setActivePromptId(newId);
-    setActiveTemplateId(null);
-    setIsTemplate(false);
-    setSaveStatus("saved");
-    setIsSaveModalOpen(false);
-  };
-
-  const handleSaveAsTemplate = () => {
-    const titleToUse = savePromptTitle.trim() || "Untitled Template";
-    const newTemplate: PromptTemplate = {
-      id: crypto.randomUUID(),
-      name: titleToUse,
-      content: promptContent,
-      category: "custom",
-    };
-    setCustomTemplates((prev) => [...prev, newTemplate]);
-    setActiveTemplateId(newTemplate.id);
-    setActivePromptId(null);
-    setDraftTitle(newTemplate.name);
-    setIsTemplate(true);
-    setSaveStatus("saved");
-    setIsSaveModalOpen(false);
-  };
-
   const handleDeleteSavedPrompt = (id: string) => {
     const prompt = savedPrompts.find((p) => p.id === id);
     if (prompt && confirm("Archive this prompt?")) {
@@ -569,7 +654,7 @@ const App: React.FC = () => {
         setActivePromptId(null);
         setPromptContent("");
         setDraftTitle("");
-        setSaveStatus("unsaved");
+        setSaveStatus("saved");
       }
     }
   };
@@ -598,7 +683,7 @@ const App: React.FC = () => {
       setActiveTemplateId(null);
       setPromptContent("");
       setDraftTitle("");
-      setSaveStatus("unsaved");
+      setSaveStatus("saved");
       setIsTemplate(false);
     }
   };
@@ -672,15 +757,8 @@ const App: React.FC = () => {
   };
 
   const handleNewPrompt = () => {
-    if (promptContent.trim().length > 0 && saveStatus === "unsaved") {
-      if (!confirm("Clear unsaved editor for a new prompt?")) return;
-    }
     setPromptContent("");
-    setActivePromptId(null);
-    setActiveTemplateId(null);
-    setDraftTitle("");
-    setSaveStatus("saved"); // Empty is considered saved
-    setIsTemplate(false);
+    createNewPrompt("", "Untitled Prompt");
   };
 
   const handleSendMessage = async (text: string) => {
@@ -770,188 +848,204 @@ How can I improve this snippet?`;
     ? activeTemplate.name
     : draftTitle;
 
-  return (
-    <div className="flex h-screen bg-black overflow-hidden">
-      {/* Sidebar Panel */}
-      <div
-        className={`${
-          sidebarOpen ? "w-64" : "w-0"
-        } transition-all duration-300 overflow-hidden relative shrink-0 border-r border-zinc-800 bg-zinc-900`}
-      >
-        <div className="w-64 h-full">
-          <Sidebar
-            isOpen={true}
-            templates={allTemplates}
-            savedPrompts={savedPrompts}
-            archivedTemplates={archivedTemplates}
-            archivedPrompts={archivedPrompts}
-            terminalTabs={terminalTabs}
-            activeTerminalTabId={activeTerminalTabId}
-            activePromptId={activePromptId}
-            activeTemplateId={activeTemplateId}
-            showArchive={showArchive}
-            onSelectTerminalTab={handleSelectTerminalTab}
-            onNewTerminalTab={handleNewTerminalTab}
-            onCloseTerminalTab={handleCloseTerminalTab}
-            onSelectTemplate={handleSelectTemplate}
-            onDeleteTemplate={handleDeleteTemplate}
-            onDuplicateTemplate={handleDuplicateTemplate}
-            onSelectSavedPrompt={handleSelectSavedPrompt}
-            onDeleteSavedPrompt={handleDeleteSavedPrompt}
-            onDuplicatePrompt={handleDuplicatePrompt}
-            onRestoreTemplate={handleRestoreTemplate}
-            onRestorePrompt={handleRestorePrompt}
-            onToggleArchive={() => setShowArchive(!showArchive)}
-            onNewPrompt={handleNewPrompt}
-            onSavePrompt={handleOpenSaveModal}
-            activeView={activeView}
-            onOpenSettings={() =>
-              setActiveView((prev) => (prev === "settings" ? "editor" : "settings"))
-            }
-          />
-        </div>
-      </div>
+  const sidebarContent = (
+    <Sidebar
+      isOpen={true}
+      templates={allTemplates}
+      savedPrompts={savedPrompts}
+      archivedTemplates={archivedTemplates}
+      archivedPrompts={archivedPrompts}
+      terminalTabs={terminalTabs}
+      waitingTerminalTabIds={terminalWaitingTabs}
+      terminalCLIStatus={terminalCLIStatus}
+      activeTerminalTabId={activeTerminalTabId}
+      activePromptId={activePromptId}
+      activeTemplateId={activeTemplateId}
+      showArchive={showArchive}
+      onSelectTerminalTab={handleSelectTerminalTab}
+      onNewTerminalTab={handleNewTerminalTab}
+      onCloseTerminalTab={handleCloseTerminalTab}
+      onSelectTemplate={handleSelectTemplate}
+      onDeleteTemplate={handleDeleteTemplate}
+      onDuplicateTemplate={handleDuplicateTemplate}
+      onSelectSavedPrompt={handleSelectSavedPrompt}
+      onDeleteSavedPrompt={handleDeleteSavedPrompt}
+      onDuplicatePrompt={handleDuplicatePrompt}
+      onRestoreTemplate={handleRestoreTemplate}
+      onRestorePrompt={handleRestorePrompt}
+      onToggleArchive={() => setShowArchive(!showArchive)}
+      onNewPrompt={handleNewPrompt}
+      activeView={activeView}
+      onOpenSettings={() =>
+        setActiveView((prev) => (prev === "settings" ? "editor" : "settings"))
+      }
+    />
+  );
 
-      {/* Main Content Area */}
-      <main className="flex-1 flex flex-col h-full min-w-0 bg-zinc-950 relative">
-        {!sidebarOpen && (
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="absolute top-4 left-4 z-20 p-2 bg-zinc-800 rounded-md text-zinc-400 hover:text-white"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-        )}
-        {activeView === "settings" ? (
-          <CodexSettingsPanel
-            settings={codexSettings}
-            onChange={setCodexSettings}
-            onClose={() => setActiveView("editor")}
-            onReset={() => setCodexSettings(DEFAULT_CODEX_SETTINGS)}
-          />
-        ) : (
+  const mainContent = activeView === "settings" ? (
+    <CodexSettingsPanel
+      settings={codexSettings}
+      onChange={setCodexSettings}
+      onClose={() => setActiveView("editor")}
+      onReset={() => setCodexSettings(DEFAULT_CODEX_SETTINGS)}
+    />
+  ) : (
+    <PromptEditor
+      value={promptContent}
+      activeTitle={currentDisplayTitle}
+      saveStatus={saveStatus}
+      onChange={setPromptContent}
+      onTitleChange={handleTitleChange}
+      onImproveSelection={handleImproveSelection}
+      templates={allTemplates}
+      savedPrompts={savedPrompts}
+      isChatOpen={chatOpen}
+      onRequestTerminal={() => setTerminalOpen(true)}
+      activeTerminalTabId={activeTerminalTabId}
+      codexSettings={codexSettings}
+      isTemplate={isTemplate}
+      onToggleTemplate={() => setIsTemplate(!isTemplate)}
+    />
+  );
+
+  const { detachPanel, isDetached } = usePanelContext();
+
+  const handleDetachTerminal = async () => {
+    await detachPanel('terminal');
+    setTerminalOpen(false);
+  };
+
+  const handleDetachIndicationLogs = async () => {
+    await detachPanel('indication-logs');
+    setIndicationLogsOpen(false);
+  };
+
+  const terminalContent = (
+    <TerminalPanel
+      tabs={terminalTabs}
+      activeTabId={activeTerminalTabId}
+      onTerminalOutput={handleTerminalOutput}
+      onPopOut={handleDetachTerminal}
+      onToggleLogs={() => setIndicationLogsOpen((prev) => !prev)}
+      logsOpen={indicationLogsOpen}
+      isDetached={isDetached('terminal')}
+      cliStatus={activeTerminalTabId ? (terminalCLIStatus.get(activeTerminalTabId) || 'question') : 'question'}
+    />
+  );
+
+  return (
+    <div className="h-screen bg-black overflow-hidden">
+      <Group
+        orientation="horizontal"
+        id="desktop-prompter-main-layout"
+        className="h-full"
+      >
+        {/* Sidebar Panel */}
+        {sidebarOpen && (
           <>
-            <div className="flex-1 min-h-0">
-              <PromptEditor
-                value={promptContent}
-                activeTitle={currentDisplayTitle}
-                saveStatus={saveStatus}
-                onChange={setPromptContent}
-                onTitleChange={handleTitleChange}
-                onImproveSelection={handleImproveSelection}
-                templates={allTemplates}
-                savedPrompts={savedPrompts}
-                isChatOpen={chatOpen}
-                isTerminalOpen={terminalOpen}
-                onToggleTerminal={() => setTerminalOpen((prev) => !prev)}
-                onRequestTerminal={() => setTerminalOpen(true)}
-                activeTerminalTabId={activeTerminalTabId}
-                codexSettings={codexSettings}
-                isTemplate={isTemplate}
-                onToggleTemplate={() => setIsTemplate(!isTemplate)}
-                onSavePrompt={handleOpenSaveModal}
-              />
-            </div>
-            {terminalOpen && (
-              <div className="h-64 border-t border-zinc-800 bg-zinc-950">
-                <TerminalPanel
-                  tabs={terminalTabs}
-                  activeTabId={activeTerminalTabId}
-                />
+            <ResizablePanel
+              id="sidebar"
+              defaultSize="20%"
+              minSize="15%"
+              maxSize="40%"
+              collapsible={true}
+            >
+              <div className="h-full bg-zinc-900 border-r border-zinc-800">
+                {sidebarContent}
               </div>
-            )}
+            </ResizablePanel>
+            <Separator className="w-1 bg-zinc-800 hover:bg-indigo-500 transition-colors cursor-col-resize" />
           </>
         )}
-      </main>
 
-      {/* Chat Assistant Panel (Right Column) */}
-      {chatOpen && (
-        <div className="w-[400px] border-l border-zinc-800 bg-zinc-900 shrink-0 transition-all">
-          <ChatAssistant
-            messages={messages}
-            isLoading={chatLoading}
-            onSendMessage={handleSendMessage}
-            onClose={() => setChatOpen(false)}
-          />
-        </div>
-      )}
-
-      {/* Save Modal */}
-      {isSaveModalOpen && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-zinc-800 flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-white">Save</h3>
+        {/* Main Content Panel */}
+        <ResizablePanel id="main-content" minSize="30%">
+          <div className="h-full flex flex-col relative">
+            {!sidebarOpen && (
               <button
-                onClick={() => setIsSaveModalOpen(false)}
-                className="text-zinc-500 hover:text-white transition-colors"
+                onClick={() => setSidebarOpen(true)}
+                className="absolute top-4 left-4 z-20 p-2 bg-zinc-800 rounded-md text-zinc-400 hover:text-white"
               >
-                <X className="w-5 h-5" />
+                <Menu className="w-5 h-5" />
               </button>
-            </div>
-            <div className="p-6">
-              <label className="block text-sm font-medium text-zinc-400 mb-2">
-                Name
-              </label>
-              <input
-                type="text"
-                value={savePromptTitle}
-                onChange={(e) => setSavePromptTitle(e.target.value)}
-                placeholder="e.g., Marketing Email Generator"
-                className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 placeholder:text-zinc-600"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") executeSave();
-                  if (e.key === "Escape") setIsSaveModalOpen(false);
-                }}
-              />
-              <p className="text-xs text-zinc-500 mt-2">
-                {activePromptId ? "Updating existing prompt." : "Creating new item."}
-              </p>
-            </div>
-            <div className="px-6 py-4 bg-zinc-950/50 border-t border-zinc-800 flex flex-col gap-3 sm:flex-row sm:justify-end">
-              <button
-                onClick={() => setIsSaveModalOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
+            )}
+            <Group orientation="vertical" id="desktop-prompter-vertical-layout" className="h-full">
+              {/* Editor Panel */}
+              <ResizablePanel id="editor" minSize="20%">
+                <div className="h-full bg-zinc-950">{mainContent}</div>
+              </ResizablePanel>
 
-              <button
-                onClick={handleSaveAsTemplate}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 border border-zinc-700 rounded-lg transition-colors"
-              >
-                <FileBadge className="w-3.5 h-3.5" />
-                Save as Template
-              </button>
-
-              {activePromptId ? (
+              {terminalOpen && (
                 <>
-                  <button
-                    onClick={handleSaveAsNew}
-                    className="px-4 py-2 text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 border border-zinc-700 rounded-lg transition-colors"
+                  <Separator className="h-1 bg-zinc-800 hover:bg-indigo-500 transition-colors cursor-row-resize" />
+                  {/* Terminal Panel */}
+                  <ResizablePanel
+                    id="terminal"
+                    defaultSize="30%"
+                    minSize="10%"
+                    maxSize="70%"
+                    collapsible={true}
                   >
-                    Save as New
-                  </button>
-                  <button
-                    onClick={executeSave}
-                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-lg shadow-indigo-900/20 transition-all"
-                  >
-                    Update
-                  </button>
+                    <div className="h-full bg-zinc-950 border-t border-zinc-800">
+                      {terminalContent}
+                    </div>
+                  </ResizablePanel>
                 </>
-              ) : (
-                <button
-                  onClick={executeSave}
-                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-lg shadow-indigo-900/20 transition-all"
-                >
-                  Save Prompt
-                </button>
               )}
-            </div>
+
+              {indicationLogsOpen && (
+                <>
+                  <Separator className="h-1 bg-zinc-800 hover:bg-indigo-500 transition-colors cursor-row-resize" />
+                  <ResizablePanel
+                    id="indication-logs"
+                    defaultSize="25%"
+                    minSize="10%"
+                    maxSize="60%"
+                    collapsible={true}
+                  >
+                    <div className="h-full bg-zinc-950 border-t border-zinc-800">
+                      <IndicationLogsPanel
+                        logs={cliStatusLogs}
+                        onClear={() => {
+                          setCliStatusLogs([]);
+                          saveCliStatusLogs([]);
+                        }}
+                        onClose={() => setIndicationLogsOpen(false)}
+                        onPopOut={handleDetachIndicationLogs}
+                        isDetached={isDetached('indication-logs')}
+                      />
+                    </div>
+                  </ResizablePanel>
+                </>
+              )}
+            </Group>
           </div>
-        </div>
-      )}
+        </ResizablePanel>
+
+        {/* Chat Assistant Panel (Right Column) */}
+        {chatOpen && (
+          <>
+            <Separator className="w-1 bg-zinc-800 hover:bg-indigo-500 transition-colors cursor-col-resize" />
+            <ResizablePanel
+              id="chat"
+              defaultSize="25%"
+              minSize="15%"
+              maxSize="50%"
+              collapsible={true}
+            >
+              <div className="h-full bg-zinc-900 border-l border-zinc-800">
+                <ChatAssistant
+                  messages={messages}
+                  isLoading={chatLoading}
+                  onSendMessage={handleSendMessage}
+                  onClose={() => setChatOpen(false)}
+                />
+              </div>
+            </ResizablePanel>
+          </>
+        )}
+      </Group>
+
     </div>
   );
 };

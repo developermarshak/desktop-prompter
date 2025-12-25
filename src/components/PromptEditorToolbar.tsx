@@ -4,7 +4,6 @@ import {
   Sparkles,
   LayoutTemplate,
   RefreshCw,
-  Save,
   FileText,
   Play,
   ChevronDown,
@@ -12,7 +11,6 @@ import {
   Columns,
   Eye,
   EyeOff,
-  Terminal,
 } from 'lucide-react';
 
 interface PromptEditorToolbarProps {
@@ -28,14 +26,11 @@ interface PromptEditorToolbarProps {
   toolbarRef: RefObject<HTMLDivElement | null>;
   onTitleChange: (newTitle: string) => void;
   onToggleTemplate: () => void;
-  onSavePrompt: () => void;
   onCopyResolved: () => void;
   onImproveSelection: (selection: string) => void;
   onSetViewMode: (mode: 'edit' | 'split' | 'preview') => void;
   onToggleRunDropdown: () => void;
-  onRunWithTool: (tool: 'aider' | 'cloud-code' | 'cursor' | 'codex' | 'terminal') => void;
-  isTerminalOpen: boolean;
-  onToggleTerminal: () => void;
+  onRunWithTool: () => void;
 }
 
 export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
@@ -51,18 +46,14 @@ export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
   toolbarRef,
   onTitleChange,
   onToggleTemplate,
-  onSavePrompt,
   onCopyResolved,
   onImproveSelection,
   onSetViewMode,
   onToggleRunDropdown,
   onRunWithTool,
-  isTerminalOpen,
-  onToggleTerminal,
 }) => {
   const runDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (runDropdownRef.current && !runDropdownRef.current.contains(event.target as Node)) {
@@ -95,7 +86,6 @@ export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
           </div>
         </div>
         
-        {/* View Mode Toggles */}
         <div className="hidden md:flex bg-zinc-900 rounded-lg p-1 border border-zinc-800 shrink-0">
           <button
             onClick={() => onSetViewMode('edit')}
@@ -134,7 +124,6 @@ export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
 
         <div className="w-px h-6 bg-zinc-800 mx-1" />
 
-        {/* Template Toggle Switch */}
         <div className="flex items-center gap-2">
           {!isCompact ? (
             <>
@@ -148,13 +137,11 @@ export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
                 role="switch"
                 aria-checked={isTemplate}
               >
-                {/* Background track */}
                 <span
                   className={`absolute inset-0 rounded-full transition-colors duration-200 ease-in-out ${
                     isTemplate ? 'bg-indigo-600' : 'bg-emerald-600'
                   }`}
                 />
-                {/* Sliding thumb */}
                 <span
                   className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-all duration-200 ease-in-out ${
                     isTemplate ? 'left-6' : 'left-1'
@@ -177,13 +164,11 @@ export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
                 role="switch"
                 aria-checked={isTemplate}
               >
-                {/* Background track */}
                 <span
                   className={`absolute inset-0 rounded-full transition-colors duration-200 ease-in-out ${
                     isTemplate ? 'bg-indigo-600' : 'bg-emerald-600'
                   }`}
                 />
-                {/* Sliding thumb */}
                 <span
                   className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-all duration-200 ease-in-out ${
                     isTemplate ? 'left-6' : 'left-1'
@@ -197,26 +182,6 @@ export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
           )}
         </div>
 
-        {/* Save Button */}
-        <button
-          onClick={onSavePrompt}
-          title="Save prompt or template"
-          className={`flex items-center gap-2 ${isCompact ? 'p-2' : 'px-3 py-1.5'} text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-md transition-colors shadow-sm shadow-indigo-900/30`}
-        >
-          <Save className="w-3.5 h-3.5 shrink-0" />
-          {!isCompact && <span>Save</span>}
-          <span
-            className={`w-2 h-2 rounded-full shrink-0 ${
-              saveStatus === 'saving'
-                ? 'bg-amber-400 animate-pulse'
-                : saveStatus === 'unsaved'
-                  ? 'bg-amber-500'
-                  : 'bg-emerald-400'
-            }`}
-          />
-        </button>
-
-        {/* Copy Ready Button */}
         <button
           onClick={onCopyResolved}
           title="Copy Ready Prompt (Resolved)"
@@ -234,19 +199,6 @@ export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
           )}
         </button>
 
-        {/* Terminal Toggle */}
-        <button
-          onClick={onToggleTerminal}
-          title="Toggle terminal panel"
-          className={`flex items-center ${isCompact ? 'justify-center p-2' : 'gap-2 px-3 py-1.5'} text-xs font-medium ${
-            isTerminalOpen ? 'text-cyan-200 bg-cyan-500/15 border-cyan-500/30' : 'text-cyan-300'
-          } hover:text-white hover:bg-cyan-500/20 rounded-md transition-colors bg-zinc-900/50 border border-zinc-800`}
-        >
-          <Terminal className="w-3.5 h-3.5 shrink-0" />
-          {!isCompact && <span>Terminal</span>}
-        </button>
-
-        {/* Run Prompt Button */}
         <div className="relative" ref={runDropdownRef}>
           <button
             onClick={onToggleRunDropdown}
@@ -258,43 +210,14 @@ export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
             <ChevronDown className={`w-3 h-3 shrink-0 transition-transform ${showRunDropdown ? 'rotate-180' : ''}`} />
           </button>
 
-          {/* Dropdown Menu */}
           {showRunDropdown && (
             <div className="absolute right-0 top-full mt-2 w-48 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
               <div className="px-3 py-2 text-xs font-semibold text-zinc-500 border-b border-zinc-800 bg-zinc-950">
                 Run with:
               </div>
               <button
-                onClick={() => onRunWithTool('aider')}
-                className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-3 border-b border-zinc-800/50 last:border-0"
-              >
-                <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
-                <span>Aider</span>
-              </button>
-              <button
-                onClick={() => onRunWithTool('cloud-code')}
-                className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-3 border-b border-zinc-800/50 last:border-0"
-              >
-                <div className="w-2 h-2 rounded-full bg-purple-500 shrink-0" />
-                <span>Cloud Code</span>
-              </button>
-              <button
-                onClick={() => onRunWithTool('cursor')}
-                className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-3 border-b border-zinc-800/50 last:border-0"
-              >
-                <div className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
-                <span>Cursor</span>
-              </button>
-              <button
-                onClick={() => onRunWithTool('codex')}
+                onClick={onRunWithTool}
                 className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-3"
-              >
-                <div className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
-                <span>Codex</span>
-              </button>
-              <button
-                onClick={() => onRunWithTool('terminal')}
-                className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-3 border-t border-zinc-800/50"
               >
                 <div className="w-2 h-2 rounded-full bg-cyan-500 shrink-0" />
                 <span>Terminal</span>

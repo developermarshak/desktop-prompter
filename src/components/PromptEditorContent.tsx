@@ -47,7 +47,7 @@ export const PromptEditorContent: React.FC<PromptEditorContentProps> = ({
               onSelect={onSelect}
               onKeyDown={onKeyDown}
               onClick={onSelect}
-              placeholder="Start typing your prompt here... Type '{{' to include another prompt."
+          placeholder="Start typing your prompt here... Type '{{' to include snippet."
               className="flex-1 w-full p-6 bg-transparent text-zinc-100 font-mono text-sm resize-none focus:outline-none focus:ring-0 leading-relaxed custom-scrollbar placeholder:text-zinc-700"
               spellCheck={false}
             />

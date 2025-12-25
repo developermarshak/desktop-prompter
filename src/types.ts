@@ -1,3 +1,5 @@
+export * from './types/panels';
+
 export interface PromptTemplate {
   id: string;
   name: string;
@@ -23,6 +25,33 @@ export interface SavedPrompt {
 export interface TerminalTab {
   id: string;
   title: string;
+}
+
+export type CLIStatus = 'idle' | 'working' | 'question' | 'done';
+
+export type CLIStatusDetectionReason = 'question' | 'done' | 'working' | 'carryover' | 'idle';
+
+export interface CLIStatusDetectionMatch {
+  group: 'question' | 'done' | 'working';
+  source: 'lastLine' | 'recentOutput';
+  pattern: string;
+}
+
+export interface CLIStatusDetection {
+  status: CLIStatus;
+  previousStatus: CLIStatus;
+  reason: CLIStatusDetectionReason;
+  match?: CLIStatusDetectionMatch;
+  lastLine: string;
+  recentOutput: string;
+  bufferSize: number;
+}
+
+export interface CLIStatusLogEntry extends CLIStatusDetection {
+  id: string;
+  tabId: string;
+  timestamp: number;
+  statusChanged: boolean;
 }
 
 export type CodexRunMode = 'exec' | 'tui';

@@ -18,14 +18,11 @@ interface PromptEditorProps {
   templates: PromptTemplate[];
   savedPrompts: SavedPrompt[];
   isChatOpen: boolean;
-  isTerminalOpen: boolean;
-  onToggleTerminal: () => void;
   onRequestTerminal: () => void;
   activeTerminalTabId?: string | null;
   codexSettings: CodexSettings;
   isTemplate: boolean;
   onToggleTemplate: () => void;
-  onSavePrompt: () => void;
 }
 
 export const PromptEditor: React.FC<PromptEditorProps> = ({
@@ -38,14 +35,11 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
   templates,
   savedPrompts,
   isChatOpen,
-  isTerminalOpen,
-  onToggleTerminal,
   onRequestTerminal,
   activeTerminalTabId,
   codexSettings,
   isTemplate,
-  onToggleTemplate,
-  onSavePrompt
+  onToggleTemplate
 }) => {
   const {
     resolvedCopied,
@@ -105,14 +99,11 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
         toolbarRef={toolbarRef}
         onTitleChange={onTitleChange}
         onToggleTemplate={onToggleTemplate}
-        onSavePrompt={onSavePrompt}
         onCopyResolved={handleCopyResolved}
         onImproveSelection={onImproveSelection}
         onSetViewMode={setViewMode}
         onToggleRunDropdown={() => setShowRunDropdown(!showRunDropdown)}
         onRunWithTool={handleRunWithTool}
-        isTerminalOpen={isTerminalOpen}
-        onToggleTerminal={onToggleTerminal}
       />
       
       {/* Reference Bar */}

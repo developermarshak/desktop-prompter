@@ -3,7 +3,7 @@ import { X, FolderOpen, Play } from 'lucide-react';
 
 interface RunPromptModalProps {
   show: boolean;
-  selectedTool: 'aider' | 'cloud-code' | 'cursor' | 'codex' | 'terminal' | null;
+  selectedTool: 'terminal' | null;
   selectedDirectory: string;
   onClose: () => void;
   onDirectoryChange: (dir: string) => void;
@@ -32,20 +32,12 @@ export const RunPromptModal: React.FC<RunPromptModalProps> = ({
     return null;
   }
 
-  const toolNames: Record<string, string> = {
-    'aider': 'Aider',
-    'cloud-code': 'Cloud Code',
-    'cursor': 'Cursor',
-    'codex': 'Codex',
-    'terminal': 'Terminal'
-  };
-
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         <div className="px-6 py-4 border-b border-zinc-800 flex justify-between items-center">
           <h3 className="text-lg font-semibold text-white">
-            Run with {toolNames[selectedTool]}
+            Run with Terminal
           </h3>
           <button 
             onClick={onClose}
@@ -85,7 +77,7 @@ export const RunPromptModal: React.FC<RunPromptModalProps> = ({
             </button>
           </div>
           <p className="text-xs text-zinc-500 mt-2">
-            The directory path will be included with the prompt when copied.
+            The selected directory will be used when running in the terminal.
           </p>
         </div>
         <div className="px-6 py-4 bg-zinc-950/50 border-t border-zinc-800 flex justify-end gap-3">
@@ -100,7 +92,7 @@ export const RunPromptModal: React.FC<RunPromptModalProps> = ({
             className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-lg shadow-emerald-900/20 transition-all flex items-center gap-2"
           >
             <Play className="w-4 h-4" />
-            {selectedTool === 'terminal' ? 'Run in Terminal' : 'Copy Prompt'}
+            Run in Terminal
           </button>
         </div>
       </div>
