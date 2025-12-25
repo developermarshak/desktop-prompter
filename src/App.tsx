@@ -1047,7 +1047,8 @@ How can I improve this snippet?`;
         )}
       </Group>
 
-      {import.meta.env.PROD && <UpdaterDialog checkOnMount={true} />}
+      {/* Updater temporarily disabled - TODO: fix signature generation */}
+      {/* {import.meta.env.PROD && <UpdaterDialog checkOnMount={true} />} */}
     </div>
   );
 };

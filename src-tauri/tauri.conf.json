@@ -39,7 +39,11 @@
     "updater": {
       "endpoints": [
         "https://github.com/developermarshak/desktop-prompter/releases/latest/download/latest.json"
-      ]
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI2RDA0NjFCRkU1MTM0RDkKUldUWk5GSCtHMGJRdG80THJEVWthK3lyYlk0Slhjajl6KzhGZDQ5K0wvYjhpNkVlZmd2MmdXajAK",
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }
