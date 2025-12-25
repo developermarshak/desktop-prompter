@@ -10,14 +10,12 @@ export const UpdaterDialog: React.FC<UpdaterDialogProps> = ({
   checkOnMount = true
 }) => {
   const [update, setUpdate] = useState<Update | null>(null);
-  const [checking, setChecking] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const checkForUpdate = async () => {
     try {
-      setChecking(true);
       setError(null);
 
       const update = await check();
@@ -33,8 +31,6 @@ export const UpdaterDialog: React.FC<UpdaterDialogProps> = ({
     } catch (err) {
       console.error('Failed to check for updates:', err);
       setError(err instanceof Error ? err.message : 'Failed to check for updates');
-    } finally {
-      setChecking(false);
     }
   };
 
@@ -45,9 +41,21 @@ export const UpdaterDialog: React.FC<UpdaterDialogProps> = ({
       setDownloading(true);
       setError(null);
 
-      await update.downloadAndInstall((progress) => {
-        const percent = Math.round((progress.downloaded / progress.total) * 100);
-        setDownloadProgress(percent);
+      await update.downloadAndInstall((event) => {
+        switch (event.event) {
+          case 'Started':
+            setDownloadProgress(0);
+            break;
+          case 'Progress':
+            if (event.data && typeof event.data === 'object' && 'chunkLength' in event.data) {
+              // Track progress - this is an approximation
+              setDownloadProgress((prev) => Math.min(prev + 5, 90));
+            }
+            break;
+          case 'Finished':
+            setDownloadProgress(100);
+            break;
+        }
       });
 
       // Update installed successfully, relaunch
