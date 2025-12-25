@@ -36,6 +36,9 @@
     }
   },
   "plugins": {
+    "sql": {
+      "preload": ["sqlite:app_config.db"]
+    },
     "updater": {
       "endpoints": [
         "https://github.com/developermarshak/desktop-prompter/releases/latest/download/latest.json"

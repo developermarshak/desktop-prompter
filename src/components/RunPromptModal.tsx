@@ -3,7 +3,7 @@ import { X, FolderOpen, Play } from 'lucide-react';
 
 interface RunPromptModalProps {
   show: boolean;
-  selectedTool: 'terminal' | null;
+  selectedTool: 'codex' | 'claude' | null;
   selectedDirectory: string;
   onClose: () => void;
   onDirectoryChange: (dir: string) => void;
@@ -32,12 +32,14 @@ export const RunPromptModal: React.FC<RunPromptModalProps> = ({
     return null;
   }
 
+  const toolLabel = selectedTool === 'claude' ? 'Claude' : 'Codex';
+
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         <div className="px-6 py-4 border-b border-zinc-800 flex justify-between items-center">
           <h3 className="text-lg font-semibold text-white">
-            Run with Terminal
+            Run with {toolLabel}
           </h3>
           <button 
             onClick={onClose}
@@ -92,7 +94,7 @@ export const RunPromptModal: React.FC<RunPromptModalProps> = ({
             className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-lg shadow-emerald-900/20 transition-all flex items-center gap-2"
           >
             <Play className="w-4 h-4" />
-            Run in Terminal
+            Run in {toolLabel}
           </button>
         </div>
       </div>

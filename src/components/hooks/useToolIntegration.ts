@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { CodexSettings, PromptTemplate, SavedPrompt } from '../../types';
+import { ClaudeSettings, CodexSettings, PromptTemplate, SavedPrompt } from '../../types';
 import { DEFAULT_CODEX_SETTINGS } from '../../codexSettings';
+import { DEFAULT_CLAUDE_SETTINGS } from '../../claudeSettings';
 import { resolvePromptRefs } from '../../utils';
 import { open } from '@tauri-apps/plugin-dialog';
 import { isTauri } from '@tauri-apps/api/core';
@@ -10,9 +11,10 @@ interface UseToolIntegrationProps {
   value: string;
   templates: PromptTemplate[];
   savedPrompts: SavedPrompt[];
-  onRunInTerminal?: () => void;
+  onRunInTerminal?: () => string | null;
   terminalTabId?: string | null;
   codexSettings?: CodexSettings;
+  claudeSettings?: ClaudeSettings;
 }
 
 export const useToolIntegration = ({
@@ -22,16 +24,19 @@ export const useToolIntegration = ({
   onRunInTerminal,
   terminalTabId,
   codexSettings,
+  claudeSettings,
 }: UseToolIntegrationProps) => {
   const [showRunDropdown, setShowRunDropdown] = useState(false);
   const [showDirectoryModal, setShowDirectoryModal] = useState(false);
-  const [selectedTool, setSelectedTool] = useState<'terminal' | null>(null);
+  const [selectedTool, setSelectedTool] = useState<'codex' | 'claude' | null>(null);
   const [selectedDirectory, setSelectedDirectory] = useState<string>('');
   const runDropdownRef = useRef<HTMLDivElement>(null);
   const directoryInputRef = useRef<HTMLInputElement>(null);
   const effectiveCodexSettings = codexSettings ?? DEFAULT_CODEX_SETTINGS;
+  const effectiveClaudeSettings = claudeSettings ?? DEFAULT_CLAUDE_SETTINGS;
 
   const shellEscape = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
+  const doubleQuoteEscape = (value: string) => `"${value.replace(/["\\$`]/g, '\\$&')}"`;
 
   const buildCodexCommand = (
     prompt: string,
@@ -78,6 +83,10 @@ export const useToolIntegration = ({
     settings.configOverrides.forEach((override) => pushValue('-c', override));
     settings.imagePaths.forEach((path) => pushValue('--image', path));
 
+    if (settings.runMode !== 'exec' && prompt.trim()) {
+      args.push(shellEscape(prompt));
+    }
+
     const baseCommand = args.join(' ');
 
     if (settings.runMode === 'exec') {
@@ -90,6 +99,26 @@ export const useToolIntegration = ({
       return `cd ${shellEscape(cwd)}\n${execCommand}`;
     }
 
+    if (!cwd || !useShellCd) return baseCommand;
+    return `cd ${shellEscape(cwd)}\n${baseCommand}`;
+  };
+
+  const buildClaudeCommand = (
+    prompt: string,
+    cwd: string,
+    useShellCd: boolean
+  ) => {
+    const settings = effectiveClaudeSettings;
+    const args: string[] = ['claude'];
+    const pushValue = (flag: string, value: string) => {
+      args.push(flag, shellEscape(value));
+    };
+
+    if (settings.model.trim()) pushValue('--model', settings.model.trim());
+    if (settings.args.trim()) args.push(settings.args.trim());
+    args.push(doubleQuoteEscape(prompt));
+
+    const baseCommand = args.join(' ');
     if (!cwd || !useShellCd) return baseCommand;
     return `cd ${shellEscape(cwd)}\n${baseCommand}`;
   };
@@ -120,7 +149,7 @@ export const useToolIntegration = ({
     }
   }, [showRunDropdown]);
 
-  const handleRunWithTool = () => {
+  const handleRunWithTool = (tool: 'codex' | 'claude') => {
     const resolvedContent = resolvePromptRefs(value, templates, savedPrompts);
 
     if (!resolvedContent.trim()) {
@@ -128,7 +157,7 @@ export const useToolIntegration = ({
       return;
     }
 
-    setSelectedTool('terminal');
+    setSelectedTool(tool);
     setShowRunDropdown(false);
     setShowDirectoryModal(true);
   };
@@ -184,21 +213,20 @@ export const useToolIntegration = ({
       return;
     }
 
-    if (!terminalTabId) {
-      alert('Select a terminal tab first.');
-      setShowDirectoryModal(false);
-      setSelectedTool(null);
-      return;
-    }
-
     try {
-      onRunInTerminal?.();
-      await new Promise((resolve) => setTimeout(resolve, 60));
-      const command = buildCodexCommand(resolvedContent, dir, true);
-      enqueueTerminalWrite(terminalTabId, `${command}\n`);
-      if (effectiveCodexSettings.runMode === 'tui' && resolvedContent.trim()) {
-        enqueueTerminalWrite(terminalTabId, `${resolvedContent}\n`, 300);
+      const runTabId = onRunInTerminal?.() ?? terminalTabId ?? null;
+      if (!runTabId) {
+        alert('Select a terminal tab first.');
+        setShowDirectoryModal(false);
+        setSelectedTool(null);
+        return;
       }
+
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      const command = selectedTool === 'claude'
+        ? buildClaudeCommand(resolvedContent, dir, true)
+        : buildCodexCommand(resolvedContent, dir, true);
+      enqueueTerminalWrite(runTabId, `${command}\n`);
     } catch (error) {
       console.error('Failed to run prompt in terminal:', error);
       alert('Failed to send prompt to the terminal.');

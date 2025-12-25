@@ -7,6 +7,7 @@ import "@xterm/xterm/css/xterm.css";
 import { TerminalTab, CLIStatus } from "../types";
 import { drainTerminalWrites, subscribeTerminalQueue } from "../terminalQueue";
 import { ExternalLink } from "lucide-react";
+import { loadTerminalFontSize, saveTerminalFontSize } from "../utils/appSettings";
 
 type TerminalPanelProps = {
   className?: string;
@@ -18,6 +19,7 @@ type TerminalPanelProps = {
   isDetached?: boolean;
   onTerminalOutput?: (tabId: string, data: string) => void;
   cliStatus?: CLIStatus;
+  onRenameTab?: (tabId: string, title: string) => void;
 };
 
 type TerminalOutputPayload = {
@@ -59,12 +61,18 @@ export const TerminalPanel = ({
   isDetached = false,
   onTerminalOutput,
   cliStatus = 'question',
+  onRenameTab,
 }: TerminalPanelProps) => {
   const effectiveActiveTabId = activeTabId ?? tabs[0]?.id ?? null;
+  const activeTab = useMemo(
+    () => tabs.find((tab) => tab.id === effectiveActiveTabId) ?? null,
+    [effectiveActiveTabId, tabs],
+  );
   const containersRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const sessionsRef = useRef<Map<string, TerminalSession>>(new Map());
   const pendingOutputRef = useRef<Map<string, string[]>>(new Map());
   const runningInTauri = isTauri();
+  const fontSizeRef = useRef(DEFAULT_FONT_SIZE);
 
   const writeOutput = useCallback((id: string, data: string) => {
     const session = sessionsRef.current.get(id);
@@ -115,12 +123,14 @@ export const TerminalPanel = ({
       return;
     }
     session.term.options.fontSize = next;
+    fontSizeRef.current = next;
     session.fit.fit();
     if (session.ptyReady) {
       invoke("resize_pty", { id, cols: session.term.cols, rows: session.term.rows }).catch(
         () => undefined,
       );
     }
+    void saveTerminalFontSize(next);
   }, []);
 
   const createSession = useCallback(
@@ -133,7 +143,7 @@ export const TerminalPanel = ({
         cursorBlink: true,
         convertEol: true,
         fontFamily,
-        fontSize: DEFAULT_FONT_SIZE,
+        fontSize: fontSizeRef.current,
         theme,
         scrollback: 2000,
       });
@@ -212,6 +222,33 @@ export const TerminalPanel = ({
     },
     [adjustFontSize, flushPendingOutput, flushQueuedWrites, runningInTauri],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const storedFontSize = await loadTerminalFontSize();
+      if (cancelled || typeof storedFontSize !== "number" || !Number.isFinite(storedFontSize)) {
+        return;
+      }
+      const clampedFontSize = Math.min(
+        MAX_FONT_SIZE,
+        Math.max(MIN_FONT_SIZE, storedFontSize),
+      );
+      fontSizeRef.current = clampedFontSize;
+      sessionsRef.current.forEach((session, id) => {
+        session.term.options.fontSize = clampedFontSize;
+        session.fit.fit();
+        if (session.ptyReady) {
+          invoke("resize_pty", { id, cols: session.term.cols, rows: session.term.rows }).catch(
+            () => undefined,
+          );
+        }
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!runningInTauri) {
@@ -335,9 +372,22 @@ export const TerminalPanel = ({
     <div className={containerClassName}>
       <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900 px-3 py-1.5">
         <div className="flex items-center gap-1.5">
-          <div className="text-xs font-semibold text-zinc-200">Terminal</div>
+          <input
+            type="text"
+            value={activeTab?.title ?? ''}
+            onChange={(event) => {
+              if (!activeTab) {
+                return;
+              }
+              onRenameTab?.(activeTab.id, event.target.value);
+            }}
+            placeholder="Terminal"
+            title="Rename terminal tab"
+            disabled={!activeTab || !onRenameTab}
+            className="w-40 bg-transparent text-xs font-semibold text-zinc-200 placeholder:text-zinc-700 focus:outline-none focus:ring-0 disabled:text-zinc-600"
+          />
           <div
-            className={`w-2 h-2 ${statusColors[cliStatus]}`}
+            className={`w-2 h-2 rounded-full ${statusColors[cliStatus]}`}
             title={statusTitles[cliStatus]}
           />
         </div>

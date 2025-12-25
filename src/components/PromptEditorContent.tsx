@@ -33,7 +33,7 @@ export const PromptEditorContent: React.FC<PromptEditorContentProps> = ({
   );
 
   return (
-    <div className="flex-1 overflow-hidden relative group">
+    <div className="h-full min-h-0 overflow-hidden relative group">
       {viewMode === 'preview' ? (
         renderPreview()
       ) : (

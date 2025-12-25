@@ -17,15 +17,21 @@ import { Menu } from "lucide-react";
 import { resolvePromptRefs, generateTitleFromContent } from "./utils";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { CodexSettingsPanel } from "./components/CodexSettings";
+import { DEFAULT_CODEX_SETTINGS, coerceCodexSettings } from "./codexSettings";
+import { DEFAULT_CLAUDE_SETTINGS, coerceClaudeSettings } from "./claudeSettings";
+import { ClaudeSettings, CodexSettings } from "./types";
 import {
-  DEFAULT_CODEX_SETTINGS,
-  coerceCodexSettings,
-} from "./codexSettings";
-import { CodexSettings } from "./types";
-import { Group, Panel as ResizablePanel, Separator } from "react-resizable-panels";
+  Group,
+  Panel as ResizablePanel,
+  Separator,
+  type GroupImperativeHandle,
+  type Layout,
+} from "react-resizable-panels";
 import { usePanelContext } from "./contexts/PanelContext";
 import { CLIStatusTracker } from "./utils/cliStatusDetector";
 import { IndicationLogsPanel } from "./components/IndicationLogsPanel";
+import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
+import { isTauri } from "@tauri-apps/api/core";
 // import { UpdaterDialog } from "./components/UpdaterDialog";
 import {
   loadCliStatusLogs,
@@ -33,6 +39,13 @@ import {
   trimCliStatusLogs,
   truncateLogText,
 } from "./utils/cliStatusLogs";
+import {
+  loadLayoutSnapshot,
+  loadWindowSize,
+  saveLayoutSnapshot,
+  saveWindowSize,
+  type LayoutSnapshot,
+} from "./utils/appSettings";
 
 // Default Templates
 const DEFAULT_TEMPLATES: PromptTemplate[] = [
@@ -105,9 +118,7 @@ const App: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [chatOpen, setChatOpen] = useState(false); // Default to closed for cleaner UI
   const [terminalOpen, setTerminalOpen] = useState(false);
-  const [terminalTabs, setTerminalTabs] = useState<TerminalTab[]>(() => [
-    { id: crypto.randomUUID(), title: "Terminal 1" },
-  ]);
+  const [terminalTabs, setTerminalTabs] = useState<TerminalTab[]>(() => []);
   const [activeTerminalTabId, setActiveTerminalTabId] = useState<string | null>(
     null
   );
@@ -128,6 +139,9 @@ const App: React.FC = () => {
   const [codexSettings, setCodexSettings] = useState<CodexSettings>(
     DEFAULT_CODEX_SETTINGS
   );
+  const [claudeSettings, setClaudeSettings] = useState<ClaudeSettings>(
+    DEFAULT_CLAUDE_SETTINGS
+  );
 
   // Active Prompt State
   const [activePromptId, setActivePromptId] = useState<string | null>(null);
@@ -139,6 +153,12 @@ const App: React.FC = () => {
   const chatSessionRef = useRef<Chat | null>(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cliStatusTrackersRef = useRef<Map<string, CLIStatusTracker>>(new Map());
+  const mainGroupRef = useRef<GroupImperativeHandle | null>(null);
+  const verticalGroupRef = useRef<GroupImperativeHandle | null>(null);
+  const layoutSnapshotRef = useRef<LayoutSnapshot>({ main: {}, vertical: {} });
+  const layoutSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const windowSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [layoutLoaded, setLayoutLoaded] = useState(false);
 
   useEffect(() => {
     if (!activeTerminalTabId && terminalTabs.length > 0) {
@@ -155,6 +175,151 @@ const App: React.FC = () => {
 
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  const scheduleLayoutSave = useCallback(() => {
+    if (layoutSaveTimerRef.current) {
+      clearTimeout(layoutSaveTimerRef.current);
+    }
+    layoutSaveTimerRef.current = setTimeout(() => {
+      void saveLayoutSnapshot(layoutSnapshotRef.current);
+    }, 400);
+  }, []);
+
+  const handleMainLayoutChange = useCallback(
+    (layout: Layout) => {
+      layoutSnapshotRef.current = {
+        ...layoutSnapshotRef.current,
+        main: layout,
+      };
+      if (layoutLoaded) {
+        scheduleLayoutSave();
+      }
+    },
+    [layoutLoaded, scheduleLayoutSave]
+  );
+
+  const handleVerticalLayoutChange = useCallback(
+    (layout: Layout) => {
+      layoutSnapshotRef.current = {
+        ...layoutSnapshotRef.current,
+        vertical: layout,
+      };
+      if (layoutLoaded) {
+        scheduleLayoutSave();
+      }
+    },
+    [layoutLoaded, scheduleLayoutSave]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const restoreLayoutAndWindow = async () => {
+      const [storedLayout, storedWindow] = await Promise.all([
+        loadLayoutSnapshot(),
+        loadWindowSize(),
+      ]);
+
+      if (cancelled) {
+        return;
+      }
+
+      if (storedLayout) {
+        layoutSnapshotRef.current = storedLayout;
+      }
+
+      if (storedWindow && isTauri()) {
+        const appWindow = getCurrentWindow();
+        await appWindow.setSize(
+          new LogicalSize(storedWindow.width, storedWindow.height)
+        );
+      }
+
+      setLayoutLoaded(true);
+    };
+
+    void restoreLayoutAndWindow();
+
+    return () => {
+      cancelled = true;
+      if (layoutSaveTimerRef.current) {
+        clearTimeout(layoutSaveTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!layoutLoaded) {
+      return;
+    }
+
+    const applyStoredLayout = (
+      groupRef: React.RefObject<GroupImperativeHandle | null>,
+      storedLayout: Layout,
+      key: keyof LayoutSnapshot
+    ) => {
+      const group = groupRef.current;
+      if (!group) {
+        return;
+      }
+
+      const current = group.getLayout();
+      if (Object.keys(storedLayout).length === 0) {
+        layoutSnapshotRef.current = {
+          ...layoutSnapshotRef.current,
+          [key]: current,
+        };
+        scheduleLayoutSave();
+        return;
+      }
+
+      const filtered = Object.fromEntries(
+        Object.entries(storedLayout).filter(([panelId]) => panelId in current)
+      );
+
+      const merged = { ...current, ...filtered };
+      group.setLayout(merged);
+      layoutSnapshotRef.current = {
+        ...layoutSnapshotRef.current,
+        [key]: merged,
+      };
+    };
+
+    applyStoredLayout(mainGroupRef, layoutSnapshotRef.current.main, 'main');
+    applyStoredLayout(verticalGroupRef, layoutSnapshotRef.current.vertical, 'vertical');
+  }, [layoutLoaded, scheduleLayoutSave]);
+
+  useEffect(() => {
+    if (!isTauri()) {
+      return;
+    }
+
+    let unlisten: (() => void) | null = null;
+
+    const handleResize = async () => {
+      const appWindow = getCurrentWindow();
+      unlisten = await appWindow.onResized(({ payload }) => {
+        if (windowSaveTimerRef.current) {
+          clearTimeout(windowSaveTimerRef.current);
+        }
+        windowSaveTimerRef.current = setTimeout(() => {
+          void saveWindowSize({
+            width: payload.width,
+            height: payload.height,
+          });
+        }, 250);
+      });
+    };
+
+    void handleResize();
+
+    return () => {
+      unlisten?.();
+      if (windowSaveTimerRef.current) {
+        clearTimeout(windowSaveTimerRef.current);
+      }
+    };
   }, []);
 
   const handleCLIDetection = useCallback(
@@ -343,6 +508,17 @@ const App: React.FC = () => {
     }
   }, []);
 
+  useEffect(() => {
+    const storedSettings = localStorage.getItem("promptArchitect_claudeSettings");
+    if (storedSettings) {
+      try {
+        setClaudeSettings(coerceClaudeSettings(JSON.parse(storedSettings)));
+      } catch (e) {
+        console.error("Failed to parse claude settings", e);
+      }
+    }
+  }, []);
+
   // Persist Saved Prompts List
   useEffect(() => {
     localStorage.setItem("savedPrompts", JSON.stringify(savedPrompts));
@@ -394,6 +570,13 @@ const App: React.FC = () => {
       JSON.stringify(codexSettings)
     );
   }, [codexSettings]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "promptArchitect_claudeSettings",
+      JSON.stringify(claudeSettings)
+    );
+  }, [claudeSettings]);
 
   const createNewPrompt = useCallback((content: string, title?: string) => {
     const resolvedTitle =
@@ -549,15 +732,29 @@ const App: React.FC = () => {
     }
   }, [clearTerminalWaiting]);
 
-  const handleNewTerminalTab = () => {
-    const newTab: TerminalTab = {
-      id: crypto.randomUUID(),
-      title: `Terminal ${terminalTabs.length + 1}`,
-    };
-    setTerminalTabs((prev) => [...prev, newTab]);
-    setActiveTerminalTabId(newTab.id);
+  const createTerminalTab = useCallback(() => {
+    const id = crypto.randomUUID();
+    setTerminalTabs((prev) => [
+      ...prev,
+      {
+        id,
+        title: `Terminal ${prev.length + 1}`,
+      },
+    ]);
+    setActiveTerminalTabId(id);
     setTerminalOpen(true);
+    return id;
+  }, []);
+
+  const handleNewTerminalTab = () => {
+    createTerminalTab();
   };
+
+  const handleRenameTerminalTab = useCallback((tabId: string, title: string) => {
+    setTerminalTabs((prev) =>
+      prev.map((tab) => (tab.id === tabId ? { ...tab, title } : tab))
+    );
+  }, []);
 
   const handleCloseTerminalTab = (tabId: string) => {
     setTerminalWaitingTabs((prev) => {
@@ -571,12 +768,8 @@ const App: React.FC = () => {
     setTerminalTabs((prev) => {
       const nextTabs = prev.filter((tab) => tab.id !== tabId);
       if (nextTabs.length === 0) {
-        const fallback = {
-          id: crypto.randomUUID(),
-          title: "Terminal 1",
-        };
-        setActiveTerminalTabId(fallback.id);
-        return [fallback];
+        setActiveTerminalTabId(null);
+        return [];
       }
       if (activeTerminalTabId === tabId) {
         setActiveTerminalTabId(nextTabs[0].id);
@@ -866,6 +1059,7 @@ How can I improve this snippet?`;
       onSelectTerminalTab={handleSelectTerminalTab}
       onNewTerminalTab={handleNewTerminalTab}
       onCloseTerminalTab={handleCloseTerminalTab}
+      onRenameTerminalTab={handleRenameTerminalTab}
       onSelectTemplate={handleSelectTemplate}
       onDeleteTemplate={handleDeleteTemplate}
       onDuplicateTemplate={handleDuplicateTemplate}
@@ -886,9 +1080,14 @@ How can I improve this snippet?`;
   const mainContent = activeView === "settings" ? (
     <CodexSettingsPanel
       settings={codexSettings}
+      claudeSettings={claudeSettings}
       onChange={setCodexSettings}
+      onClaudeChange={setClaudeSettings}
       onClose={() => setActiveView("editor")}
-      onReset={() => setCodexSettings(DEFAULT_CODEX_SETTINGS)}
+      onReset={() => {
+        setCodexSettings(DEFAULT_CODEX_SETTINGS);
+        setClaudeSettings(DEFAULT_CLAUDE_SETTINGS);
+      }}
     />
   ) : (
     <PromptEditor
@@ -901,9 +1100,10 @@ How can I improve this snippet?`;
       templates={allTemplates}
       savedPrompts={savedPrompts}
       isChatOpen={chatOpen}
-      onRequestTerminal={() => setTerminalOpen(true)}
+      onRequestTerminal={createTerminalTab}
       activeTerminalTabId={activeTerminalTabId}
       codexSettings={codexSettings}
+      claudeSettings={claudeSettings}
       isTemplate={isTemplate}
       onToggleTemplate={() => setIsTemplate(!isTemplate)}
     />
@@ -931,6 +1131,7 @@ How can I improve this snippet?`;
       logsOpen={indicationLogsOpen}
       isDetached={isDetached('terminal')}
       cliStatus={activeTerminalTabId ? (terminalCLIStatus.get(activeTerminalTabId) || 'question') : 'question'}
+      onRenameTab={handleRenameTerminalTab}
     />
   );
 
@@ -940,6 +1141,8 @@ How can I improve this snippet?`;
         orientation="horizontal"
         id="desktop-prompter-main-layout"
         className="h-full"
+        groupRef={mainGroupRef}
+        onLayoutChange={handleMainLayoutChange}
       >
         {/* Sidebar Panel */}
         {sidebarOpen && (
@@ -970,7 +1173,13 @@ How can I improve this snippet?`;
                 <Menu className="w-5 h-5" />
               </button>
             )}
-            <Group orientation="vertical" id="desktop-prompter-vertical-layout" className="h-full">
+            <Group
+              orientation="vertical"
+              id="desktop-prompter-vertical-layout"
+              className="h-full"
+              groupRef={verticalGroupRef}
+              onLayoutChange={handleVerticalLayoutChange}
+            >
               {/* Editor Panel */}
               <ResizablePanel id="editor" minSize="20%">
                 <div className="h-full bg-zinc-950">{mainContent}</div>

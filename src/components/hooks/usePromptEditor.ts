@@ -6,7 +6,7 @@ import {
   type ChangeEvent,
   type KeyboardEvent,
 } from 'react';
-import { CodexSettings, PromptTemplate, SavedPrompt } from '../../types';
+import { ClaudeSettings, CodexSettings, PromptTemplate, SavedPrompt } from '../../types';
 import { resolvePromptRefs, extractUniqueRefs } from '../../utils';
 import { useAutocomplete } from './useAutocomplete';
 import { useReferenceInspection } from './useReferenceInspection';
@@ -18,9 +18,10 @@ interface UsePromptEditorProps {
   savedPrompts: SavedPrompt[];
   onChange: (value: string) => void;
   isChatOpen: boolean;
-  onRequestTerminal?: () => void;
+  onRequestTerminal?: () => string | null;
   activeTerminalTabId?: string | null;
   codexSettings: CodexSettings;
+  claudeSettings: ClaudeSettings;
 }
 
 export const usePromptEditor = ({
@@ -32,6 +33,7 @@ export const usePromptEditor = ({
   onRequestTerminal,
   activeTerminalTabId,
   codexSettings,
+  claudeSettings,
 }: UsePromptEditorProps) => {
   const [resolvedCopied, setResolvedCopied] = useState(false);
   const [selection, setSelection] = useState('');
@@ -52,6 +54,7 @@ export const usePromptEditor = ({
     onRunInTerminal: onRequestTerminal,
     terminalTabId: activeTerminalTabId,
     codexSettings,
+    claudeSettings,
   });
 
   // Autocomplete Hook

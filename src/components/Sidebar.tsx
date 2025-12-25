@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { PromptTemplate, SavedPrompt, TerminalTab, CLIStatus } from '../types';
 import { LayoutTemplate, Plus, Trash2, Clock, FileBadge, Archive, RotateCcw, Copy, Settings, Terminal, X } from 'lucide-react';
 
@@ -17,6 +17,7 @@ interface SidebarProps {
   onSelectTerminalTab: (tab: TerminalTab) => void;
   onNewTerminalTab: () => void;
   onCloseTerminalTab: (id: string) => void;
+  onRenameTerminalTab: (id: string, title: string) => void;
   onSelectTemplate: (template: PromptTemplate) => void;
   onDeleteTemplate: (id: string) => void;
   onDuplicateTemplate: (template: PromptTemplate) => void;
@@ -47,6 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectTerminalTab,
   onNewTerminalTab,
   onCloseTerminalTab,
+  onRenameTerminalTab,
   onSelectTemplate,
   onDeleteTemplate,
   onDuplicateTemplate,
@@ -63,6 +65,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   if (!isOpen) return null;
 
+  const [editingTerminalTabId, setEditingTerminalTabId] = useState<string | null>(null);
+  const [terminalTitleDraft, setTerminalTitleDraft] = useState('');
+
+  const beginTerminalRename = (tab: TerminalTab) => {
+    setEditingTerminalTabId(tab.id);
+    setTerminalTitleDraft(tab.title);
+  };
+
+  const commitTerminalRename = () => {
+    if (!editingTerminalTabId) {
+      return;
+    }
+    const nextTitle = terminalTitleDraft.trim();
+    if (nextTitle.length > 0) {
+      onRenameTerminalTab(editingTerminalTabId, nextTitle);
+    }
+    setEditingTerminalTabId(null);
+    setTerminalTitleDraft('');
+  };
+
+  const cancelTerminalRename = () => {
+    setEditingTerminalTabId(null);
+    setTerminalTitleDraft('');
+  };
+
   // Unified list: Custom templates first, then System templates
   const unifiedTemplates = [...templates].sort((a, b) => {
     // Priority: Custom > System
@@ -74,20 +101,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside className="w-full bg-zinc-900 border-r border-zinc-800 flex flex-col h-full shrink-0 transition-all duration-300">
-      <div className="h-10 border-b border-zinc-800 flex items-center justify-between px-3 shrink-0">
-        <h1 className="font-bold text-sm text-white tracking-tight flex items-center gap-1.5">
-           <LayoutTemplate className="w-4 h-4 text-indigo-500" />
-           PromptArch
-        </h1>
-        <button
-          onClick={onNewPrompt}
-          className="p-1 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
-          title="New Prompt"
-        >
-          <Plus className="w-4 h-4" />
-        </button>
-      </div>
-
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {/* Snippets Section */}
         <div className="p-2 pb-1.5">
@@ -226,6 +239,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 const isActive = tab.id === activeTerminalTabId;
                 const isWaiting = waitingTerminalTabIds?.has(tab.id) ?? false;
                 const cliStatus = terminalCLIStatus?.get(tab.id) || 'question';
+                const isEditing = editingTerminalTabId === tab.id;
 
                 const statusColors: Record<CLIStatus, string> = {
                   idle: 'bg-yellow-500',
@@ -245,6 +259,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <div
                     key={tab.id}
                     onClick={() => onSelectTerminalTab(tab)}
+                    onDoubleClick={() => beginTerminalRename(tab)}
                     className={`group flex items-center justify-between px-2 py-1.5 text-xs transition-colors cursor-pointer ${
                       isActive
                         ? 'bg-zinc-800 text-white'
@@ -252,9 +267,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }`}
                   >
                     <div className="flex min-w-0 flex-1 items-center gap-1.5 mr-1">
-                      <span className="truncate">{tab.title}</span>
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={terminalTitleDraft}
+                          onChange={(event) => setTerminalTitleDraft(event.target.value)}
+                          onBlur={commitTerminalRename}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              commitTerminalRename();
+                            }
+                            if (event.key === 'Escape') {
+                              cancelTerminalRename();
+                            }
+                          }}
+                          onClick={(event) => event.stopPropagation()}
+                          onDoubleClick={(event) => event.stopPropagation()}
+                          className="w-full bg-zinc-900/70 border border-zinc-700 rounded px-1 py-0.5 text-xs text-zinc-200 focus:outline-none focus:ring-0"
+                          autoFocus
+                        />
+                      ) : (
+                        <span className="truncate">{tab.title}</span>
+                      )}
                       <div
-                        className={`h-2 w-2 ${statusColors[cliStatus]} ${cliStatus === 'question' || cliStatus === 'working' ? 'animate-pulse' : ''}`}
+                        className={`h-2 w-2 rounded-full ${statusColors[cliStatus]} ${cliStatus === 'question' || cliStatus === 'working' ? 'animate-pulse' : ''}`}
                         title={statusTitles[cliStatus]}
                       />
                       {isWaiting && (
@@ -262,7 +298,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           className="flex items-center gap-0.5 text-[9px] uppercase tracking-wide text-amber-300"
                           title="Waiting for output"
                         >
-                          <span className="h-1.5 w-1.5 bg-amber-400 animate-pulse" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
                           wait
                         </span>
                       )}

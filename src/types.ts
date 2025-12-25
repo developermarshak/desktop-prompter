@@ -80,3 +80,8 @@ export interface CodexSettings {
   configOverrides: string[];
   imagePaths: string[];
 }
+
+export interface ClaudeSettings {
+  model: string;
+  args: string;
+}

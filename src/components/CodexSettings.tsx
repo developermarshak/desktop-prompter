@@ -1,17 +1,21 @@
 import React from 'react';
-import { CodexSettings } from '../types';
+import { ClaudeSettings, CodexSettings } from '../types';
 import { listToText, textToList } from '../codexSettings';
 
 interface CodexSettingsProps {
   settings: CodexSettings;
+  claudeSettings: ClaudeSettings;
   onChange: (next: CodexSettings) => void;
+  onClaudeChange: (next: ClaudeSettings) => void;
   onClose: () => void;
   onReset: () => void;
 }
 
 export const CodexSettingsPanel: React.FC<CodexSettingsProps> = ({
   settings,
+  claudeSettings,
   onChange,
+  onClaudeChange,
   onClose,
   onReset,
 }) => {
@@ -19,13 +23,17 @@ export const CodexSettingsPanel: React.FC<CodexSettingsProps> = ({
     onChange({ ...settings, ...patch });
   };
 
+  const updateClaude = (patch: Partial<ClaudeSettings>) => {
+    onClaudeChange({ ...claudeSettings, ...patch });
+  };
+
   return (
     <div className="flex h-full flex-col bg-zinc-950">
       <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900 px-6 py-4">
         <div>
-          <div className="text-lg font-semibold text-white">Codex Settings</div>
+          <div className="text-lg font-semibold text-white">Tool Settings</div>
           <div className="text-xs text-zinc-500">
-            Used when running a prompt in the terminal.
+            Used when running prompts in the terminal.
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -158,6 +166,32 @@ export const CodexSettingsPanel: React.FC<CodexSettingsProps> = ({
                 onChange={(e) => update({ search: e.target.checked })}
               />
               --search
+            </label>
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <h3 className="text-sm font-semibold text-zinc-200">Claude CLI</h3>
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="flex flex-col gap-2 text-sm text-zinc-300">
+              Model
+              <input
+                type="text"
+                value={claudeSettings.model}
+                onChange={(e) => updateClaude({ model: e.target.value })}
+                placeholder="claude-3-5-sonnet"
+                className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
+              />
+            </label>
+            <label className="flex flex-col gap-2 text-sm text-zinc-300">
+              Extra args
+              <input
+                type="text"
+                value={claudeSettings.args}
+                onChange={(e) => updateClaude({ args: e.target.value })}
+                placeholder="--max-tokens 2048"
+                className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
+              />
             </label>
           </div>
         </section>

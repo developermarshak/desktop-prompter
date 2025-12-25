@@ -30,7 +30,7 @@ interface PromptEditorToolbarProps {
   onImproveSelection: (selection: string) => void;
   onSetViewMode: (mode: 'edit' | 'split' | 'preview') => void;
   onToggleRunDropdown: () => void;
-  onRunWithTool: () => void;
+  onRunWithTool: (tool: 'codex' | 'claude') => void;
 }
 
 export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
@@ -216,11 +216,18 @@ export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
                 Run with:
               </div>
               <button
-                onClick={onRunWithTool}
+                onClick={() => onRunWithTool('codex')}
                 className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-3"
               >
                 <div className="w-2 h-2 rounded-full bg-cyan-500 shrink-0" />
-                <span>Terminal</span>
+                <span>Codex</span>
+              </button>
+              <button
+                onClick={() => onRunWithTool('claude')}
+                className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-3"
+              >
+                <div className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                <span>Claude</span>
               </button>
             </div>
           )}

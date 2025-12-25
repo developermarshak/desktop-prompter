@@ -1,5 +1,5 @@
 import React from 'react';
-import { CodexSettings, PromptTemplate, SavedPrompt } from '../types';
+import { ClaudeSettings, CodexSettings, PromptTemplate, SavedPrompt } from '../types';
 import { PromptEditorToolbar } from './PromptEditorToolbar';
 import { PromptEditorReferenceBar } from './PromptEditorReferenceBar';
 import { PromptEditorContent } from './PromptEditorContent';
@@ -18,9 +18,10 @@ interface PromptEditorProps {
   templates: PromptTemplate[];
   savedPrompts: SavedPrompt[];
   isChatOpen: boolean;
-  onRequestTerminal: () => void;
+  onRequestTerminal: () => string | null;
   activeTerminalTabId?: string | null;
   codexSettings: CodexSettings;
+  claudeSettings: ClaudeSettings;
   isTemplate: boolean;
   onToggleTemplate: () => void;
 }
@@ -38,6 +39,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
   onRequestTerminal,
   activeTerminalTabId,
   codexSettings,
+  claudeSettings,
   isTemplate,
   onToggleTemplate
 }) => {
@@ -81,6 +83,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
     onRequestTerminal,
     activeTerminalTabId,
     codexSettings,
+    claudeSettings,
   });
 
   return (
@@ -117,7 +120,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
       />
 
       {/* Editor Content Area */}
-      <div className="flex-1 overflow-hidden relative group">
+      <div className="flex-1 min-h-0 overflow-hidden relative group">
         <PromptEditorContent
           value={value}
           viewMode={viewMode}
