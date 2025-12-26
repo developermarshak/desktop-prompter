@@ -18,7 +18,8 @@ interface PromptEditorProps {
   templates: PromptTemplate[];
   savedPrompts: SavedPrompt[];
   isChatOpen: boolean;
-  onRequestTerminal: () => string | null;
+  onRequestTerminal: (title?: string) => string | null;
+  promptTitle?: string;
   activeTerminalTabId?: string | null;
   codexSettings: CodexSettings;
   claudeSettings: ClaudeSettings;
@@ -37,6 +38,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
   savedPrompts,
   isChatOpen,
   onRequestTerminal,
+  promptTitle,
   activeTerminalTabId,
   codexSettings,
   claudeSettings,
@@ -81,6 +83,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
     onChange,
     isChatOpen,
     onRequestTerminal,
+    promptTitle,
     activeTerminalTabId,
     codexSettings,
     claudeSettings,

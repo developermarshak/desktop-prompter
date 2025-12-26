@@ -732,13 +732,13 @@ const App: React.FC = () => {
     }
   }, [clearTerminalWaiting]);
 
-  const createTerminalTab = useCallback(() => {
+  const createTerminalTab = useCallback((title?: string) => {
     const id = crypto.randomUUID();
     setTerminalTabs((prev) => [
       ...prev,
       {
         id,
-        title: `Terminal ${prev.length + 1}`,
+        title: title ?? `Terminal ${prev.length + 1}`,
       },
     ]);
     setActiveTerminalTabId(id);
@@ -1101,6 +1101,7 @@ How can I improve this snippet?`;
       savedPrompts={savedPrompts}
       isChatOpen={chatOpen}
       onRequestTerminal={createTerminalTab}
+      promptTitle={currentDisplayTitle}
       activeTerminalTabId={activeTerminalTabId}
       codexSettings={codexSettings}
       claudeSettings={claudeSettings}

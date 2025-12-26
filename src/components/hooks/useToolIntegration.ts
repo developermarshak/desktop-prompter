@@ -11,7 +11,8 @@ interface UseToolIntegrationProps {
   value: string;
   templates: PromptTemplate[];
   savedPrompts: SavedPrompt[];
-  onRunInTerminal?: () => string | null;
+  onRunInTerminal?: (title?: string) => string | null;
+  promptTitle?: string;
   terminalTabId?: string | null;
   codexSettings?: CodexSettings;
   claudeSettings?: ClaudeSettings;
@@ -22,6 +23,7 @@ export const useToolIntegration = ({
   templates,
   savedPrompts,
   onRunInTerminal,
+  promptTitle,
   terminalTabId,
   codexSettings,
   claudeSettings,
@@ -214,7 +216,7 @@ export const useToolIntegration = ({
     }
 
     try {
-      const runTabId = onRunInTerminal?.() ?? terminalTabId ?? null;
+      const runTabId = onRunInTerminal?.(promptTitle) ?? terminalTabId ?? null;
       if (!runTabId) {
         alert('Select a terminal tab first.');
         setShowDirectoryModal(false);

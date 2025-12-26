@@ -18,7 +18,8 @@ interface UsePromptEditorProps {
   savedPrompts: SavedPrompt[];
   onChange: (value: string) => void;
   isChatOpen: boolean;
-  onRequestTerminal?: () => string | null;
+  onRequestTerminal?: (title?: string) => string | null;
+  promptTitle?: string;
   activeTerminalTabId?: string | null;
   codexSettings: CodexSettings;
   claudeSettings: ClaudeSettings;
@@ -31,6 +32,7 @@ export const usePromptEditor = ({
   onChange,
   isChatOpen,
   onRequestTerminal,
+  promptTitle,
   activeTerminalTabId,
   codexSettings,
   claudeSettings,
@@ -39,7 +41,7 @@ export const usePromptEditor = ({
   const [selection, setSelection] = useState('');
   const [isCompact, setIsCompact] = useState(false);
   const [viewMode, setViewMode] = useState<'edit' | 'split' | 'preview'>('edit');
-  
+
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
 
@@ -52,6 +54,7 @@ export const usePromptEditor = ({
     templates,
     savedPrompts,
     onRunInTerminal: onRequestTerminal,
+    promptTitle,
     terminalTabId: activeTerminalTabId,
     codexSettings,
     claudeSettings,
