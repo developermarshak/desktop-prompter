@@ -1065,7 +1065,7 @@ const App: React.FC = () => {
       );
 
       const contextMessage = `I'm working on this specific part of my prompt:
-    
+
 """
 ${expandedSelection}
 """
@@ -1075,6 +1075,69 @@ How can I improve this snippet?`;
     },
     [chatOpen, savedPrompts, allTemplates]
   );
+
+  const handleToggleTemplate = useCallback(() => {
+    if (isTemplate) {
+      // Converting from template to prompt - MOVE not copy
+      const newId = crypto.randomUUID();
+      const activeTemplate = allTemplates.find((t) => t.id === activeTemplateId);
+      const newTitle = draftTitle || (activeTemplate ? activeTemplate.name : "") || "Untitled Prompt";
+      const newPrompt: SavedPrompt = {
+        id: newId,
+        title: newTitle,
+        content: promptContent,
+        updatedAt: Date.now(),
+      };
+
+      // Add new prompt
+      setSavedPrompts((prev) => [newPrompt, ...prev]);
+
+      // Remove old template
+      if (activeTemplateId) {
+        const templateToRemove = allTemplates.find((t) => t.id === activeTemplateId);
+        if (templateToRemove) {
+          if (templateToRemove.category === "custom") {
+            setCustomTemplates((prev) => prev.filter((t) => t.id !== activeTemplateId));
+          } else {
+            // Mark default template as deleted
+            setDeletedDefaultTemplateIds((prev) => new Set([...prev, activeTemplateId]));
+            setModifiedDefaultTemplates((prev) => prev.filter((t) => t.id !== activeTemplateId));
+          }
+        }
+      }
+
+      setActivePromptId(newId);
+      setActiveTemplateId(null);
+      setIsTemplate(false);
+      setDraftTitle(newTitle);
+      setSaveStatus("saved");
+    } else {
+      // Converting from prompt to template - MOVE not copy
+      const newId = crypto.randomUUID();
+      const activePrompt = savedPrompts.find((p) => p.id === activePromptId);
+      const newName = draftTitle || (activePrompt ? activePrompt.title : "") || "Untitled Template";
+      const newTemplate: PromptTemplate = {
+        id: newId,
+        name: newName,
+        content: promptContent,
+        category: "custom",
+      };
+
+      // Add new template
+      setCustomTemplates((prev) => [newTemplate, ...prev]);
+
+      // Remove old prompt
+      if (activePromptId) {
+        setSavedPrompts((prev) => prev.filter((p) => p.id !== activePromptId));
+      }
+
+      setActiveTemplateId(newId);
+      setActivePromptId(null);
+      setIsTemplate(true);
+      setDraftTitle(newName);
+      setSaveStatus("saved");
+    }
+  }, [isTemplate, draftTitle, promptContent, allTemplates, activeTemplateId, savedPrompts, activePromptId]);
 
   const activePrompt = savedPrompts.find((p) => p.id === activePromptId);
   const activeTemplate = allTemplates.find((t) => t.id === activeTemplateId);
@@ -1150,7 +1213,7 @@ How can I improve this snippet?`;
       codexSettings={codexSettings}
       claudeSettings={claudeSettings}
       isTemplate={isTemplate}
-      onToggleTemplate={() => setIsTemplate(!isTemplate)}
+      onToggleTemplate={handleToggleTemplate}
     />
   );
 
