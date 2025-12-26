@@ -765,7 +765,7 @@ dependencies = [
 
 [[package]]
 name = "desktop-prompter"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "portable-pty",
  "serde",
