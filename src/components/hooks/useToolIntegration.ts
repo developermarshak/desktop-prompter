@@ -38,7 +38,17 @@ export const useToolIntegration = ({
   const effectiveClaudeSettings = claudeSettings ?? DEFAULT_CLAUDE_SETTINGS;
 
   const shellEscape = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
-  const doubleQuoteEscape = (value: string) => `"${value.replace(/["\\$`]/g, '\\$&')}"`;
+
+  // ANSI-C quoting for prompts - works better with PTY than traditional escaping
+  const ansiCQuote = (value: string) => {
+    const escaped = value
+      .replace(/\\/g, '\\\\')  // Escape backslashes first
+      .replace(/'/g, "\\'")     // Escape single quotes
+      .replace(/\n/g, '\\n')    // Escape newlines
+      .replace(/\r/g, '\\r')    // Escape carriage returns
+      .replace(/\t/g, '\\t');   // Escape tabs
+    return `$'${escaped}'`;
+  };
 
   const buildCodexCommand = (
     prompt: string,
@@ -85,13 +95,10 @@ export const useToolIntegration = ({
     settings.configOverrides.forEach((override) => pushValue('-c', override));
     settings.imagePaths.forEach((path) => pushValue('--image', path));
 
-    if (settings.runMode !== 'exec' && prompt.trim()) {
-      args.push(shellEscape(prompt));
-    }
-
     const baseCommand = args.join(' ');
 
     if (settings.runMode === 'exec') {
+      // Use heredoc for exec mode
       let label = 'CODEX_PROMPT';
       while (prompt.includes(label)) {
         label = `CODEX_PROMPT_${Math.random().toString(36).slice(2, 8)}`;
@@ -101,8 +108,13 @@ export const useToolIntegration = ({
       return `cd ${shellEscape(cwd)}\n${execCommand}`;
     }
 
-    if (!cwd || !useShellCd) return baseCommand;
-    return `cd ${shellEscape(cwd)}\n${baseCommand}`;
+    // Use ANSI-C quoting for TUI mode to preserve stdin as terminal
+    if (prompt.trim()) {
+      args.push(ansiCQuote(prompt));
+    }
+    const tuiCommand = args.join(' ');
+    if (!cwd || !useShellCd) return tuiCommand;
+    return `cd ${shellEscape(cwd)}\n${tuiCommand}`;
   };
 
   const buildClaudeCommand = (
@@ -118,7 +130,11 @@ export const useToolIntegration = ({
 
     if (settings.model.trim()) pushValue('--model', settings.model.trim());
     if (settings.args.trim()) args.push(settings.args.trim());
-    args.push(doubleQuoteEscape(prompt));
+
+    // Use ANSI-C quoting for prompt to avoid quote escaping issues
+    if (prompt.trim()) {
+      args.push(ansiCQuote(prompt));
+    }
 
     const baseCommand = args.join(' ');
     if (!cwd || !useShellCd) return baseCommand;
