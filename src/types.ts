@@ -83,5 +83,13 @@ export interface CodexSettings {
 
 export interface ClaudeSettings {
   model: string;
+  systemPrompt: string;
+  systemPromptFile: string;
+  appendSystemPrompt: string;
+  outputFormat: 'text' | 'json' | '';
+  addDirs: string[];
+  dangerouslySkipPermissions: boolean;
+  alwaysThinkingEnabled: boolean;
+  excludeSensitiveFiles: string[];
   args: string;
 }

@@ -2,7 +2,20 @@ import { ClaudeSettings } from './types';
 
 export const DEFAULT_CLAUDE_SETTINGS: ClaudeSettings = {
   model: '',
+  systemPrompt: '',
+  systemPromptFile: '',
+  appendSystemPrompt: '',
+  outputFormat: '',
+  addDirs: [],
+  dangerouslySkipPermissions: false,
+  alwaysThinkingEnabled: false,
+  excludeSensitiveFiles: [],
   args: '',
+};
+
+const coerceList = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
 };
 
 export const coerceClaudeSettings = (
@@ -13,7 +26,15 @@ export const coerceClaudeSettings = (
   return {
     ...DEFAULT_CLAUDE_SETTINGS,
     ...value,
-    model: typeof value.model === 'string' ? value.model : '',
-    args: typeof value.args === 'string' ? value.args : '',
+    addDirs: coerceList(value.addDirs),
+    excludeSensitiveFiles: coerceList(value.excludeSensitiveFiles),
   };
 };
+
+export const listToText = (list: string[]): string => list.join('\n');
+
+export const textToList = (value: string): string[] =>
+  value
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean);

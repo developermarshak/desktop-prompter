@@ -1,6 +1,7 @@
 import React from 'react';
 import { ClaudeSettings, CodexSettings } from '../types';
 import { listToText, textToList } from '../codexSettings';
+import { listToText as claudeListToText, textToList as claudeTextToList } from '../claudeSettings';
 
 interface CodexSettingsProps {
   settings: CodexSettings;
@@ -19,6 +20,8 @@ export const CodexSettingsPanel: React.FC<CodexSettingsProps> = ({
   onClose,
   onReset,
 }) => {
+  const [activeTab, setActiveTab] = React.useState<'codex' | 'claude'>('codex');
+
   const update = (patch: Partial<CodexSettings>) => {
     onChange({ ...settings, ...patch });
   };
@@ -29,30 +32,57 @@ export const CodexSettingsPanel: React.FC<CodexSettingsProps> = ({
 
   return (
     <div className="flex h-full flex-col bg-zinc-950">
-      <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900 px-6 py-4">
-        <div>
-          <div className="text-lg font-semibold text-white">Tool Settings</div>
-          <div className="text-xs text-zinc-500">
-            Used when running prompts in the terminal.
+      <div className="border-b border-zinc-800 bg-zinc-900">
+        <div className="flex items-center justify-between px-6 py-4">
+          <div>
+            <div className="text-lg font-semibold text-white">Tool Settings</div>
+            <div className="text-xs text-zinc-500">
+              Used when running prompts in the terminal.
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onReset}
+              className="px-3 py-1.5 text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 rounded-md transition-colors"
+            >
+              Reset
+            </button>
+            <button
+              onClick={onClose}
+              className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-md transition-colors"
+            >
+              Back to Editor
+            </button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex gap-1 px-6">
           <button
-            onClick={onReset}
-            className="px-3 py-1.5 text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 rounded-md transition-colors"
+            onClick={() => setActiveTab('codex')}
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+              activeTab === 'codex'
+                ? 'text-white border-indigo-500'
+                : 'text-zinc-400 border-transparent hover:text-zinc-200'
+            }`}
           >
-            Reset
+            Codex
           </button>
           <button
-            onClick={onClose}
-            className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-md transition-colors"
+            onClick={() => setActiveTab('claude')}
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+              activeTab === 'claude'
+                ? 'text-white border-indigo-500'
+                : 'text-zinc-400 border-transparent hover:text-zinc-200'
+            }`}
           >
-            Back to Editor
+            Claude
           </button>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+        {activeTab === 'codex' ? (
+          <>
         <section className="space-y-4">
           <h3 className="text-sm font-semibold text-zinc-200">Run Mode</h3>
           <div className="flex items-center gap-4">
@@ -171,32 +201,6 @@ export const CodexSettingsPanel: React.FC<CodexSettingsProps> = ({
         </section>
 
         <section className="space-y-4">
-          <h3 className="text-sm font-semibold text-zinc-200">Claude CLI</h3>
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className="flex flex-col gap-2 text-sm text-zinc-300">
-              Model
-              <input
-                type="text"
-                value={claudeSettings.model}
-                onChange={(e) => updateClaude({ model: e.target.value })}
-                placeholder="claude-3-5-sonnet"
-                className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
-              />
-            </label>
-            <label className="flex flex-col gap-2 text-sm text-zinc-300">
-              Extra args
-              <input
-                type="text"
-                value={claudeSettings.args}
-                onChange={(e) => updateClaude({ args: e.target.value })}
-                placeholder="--max-tokens 2048"
-                className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
-              />
-            </label>
-          </div>
-        </section>
-
-        <section className="space-y-4">
           <h3 className="text-sm font-semibold text-zinc-200">Exec Output</h3>
           <div className="grid gap-4 md:grid-cols-2">
             <label className="flex flex-col gap-2 text-sm text-zinc-300">
@@ -307,6 +311,129 @@ export const CodexSettingsPanel: React.FC<CodexSettingsProps> = ({
             </label>
           </div>
         </section>
+          </>
+        ) : (
+          <>
+        <section className="space-y-4">
+          <h3 className="text-sm font-semibold text-zinc-200">Core Settings</h3>
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="flex flex-col gap-2 text-sm text-zinc-300">
+              Model
+              <input
+                type="text"
+                value={claudeSettings.model}
+                onChange={(e) => updateClaude({ model: e.target.value })}
+                placeholder="claude-3-5-sonnet"
+                className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
+              />
+            </label>
+            <label className="flex flex-col gap-2 text-sm text-zinc-300">
+              Output format
+              <select
+                value={claudeSettings.outputFormat}
+                onChange={(e) =>
+                  updateClaude({ outputFormat: e.target.value as ClaudeSettings['outputFormat'] })
+                }
+                className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+              >
+                <option value="">Default (text)</option>
+                <option value="json">JSON</option>
+              </select>
+            </label>
+          </div>
+          <div className="flex flex-wrap gap-4 text-sm text-zinc-300">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={claudeSettings.alwaysThinkingEnabled}
+                onChange={(e) => updateClaude({ alwaysThinkingEnabled: e.target.checked })}
+              />
+              Always thinking enabled
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={claudeSettings.dangerouslySkipPermissions}
+                onChange={(e) => updateClaude({ dangerouslySkipPermissions: e.target.checked })}
+              />
+              --dangerously-skip-permissions
+            </label>
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <h3 className="text-sm font-semibold text-zinc-200">System Prompts</h3>
+          <div className="grid gap-4">
+            <label className="flex flex-col gap-2 text-sm text-zinc-300">
+              System prompt (--system-prompt)
+              <textarea
+                value={claudeSettings.systemPrompt}
+                onChange={(e) => updateClaude({ systemPrompt: e.target.value })}
+                placeholder="Custom system prompt..."
+                className="min-h-[80px] bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
+              />
+            </label>
+            <label className="flex flex-col gap-2 text-sm text-zinc-300">
+              System prompt file (--system-prompt-file)
+              <input
+                type="text"
+                value={claudeSettings.systemPromptFile}
+                onChange={(e) => updateClaude({ systemPromptFile: e.target.value })}
+                placeholder="/path/to/prompt.txt"
+                className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
+              />
+            </label>
+            <label className="flex flex-col gap-2 text-sm text-zinc-300">
+              Append system prompt (--append-system-prompt)
+              <textarea
+                value={claudeSettings.appendSystemPrompt}
+                onChange={(e) => updateClaude({ appendSystemPrompt: e.target.value })}
+                placeholder="Additional instructions..."
+                className="min-h-[80px] bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
+              />
+            </label>
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <h3 className="text-sm font-semibold text-zinc-200">Paths & Exclusions</h3>
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="flex flex-col gap-2 text-sm text-zinc-300">
+              Additional directories (--add-dir)
+              <textarea
+                value={claudeListToText(claudeSettings.addDirs)}
+                onChange={(e) => updateClaude({ addDirs: claudeTextToList(e.target.value) })}
+                placeholder="/path/one&#10;/path/two"
+                className="min-h-[120px] bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
+              />
+            </label>
+            <label className="flex flex-col gap-2 text-sm text-zinc-300">
+              Exclude sensitive files
+              <textarea
+                value={claudeListToText(claudeSettings.excludeSensitiveFiles)}
+                onChange={(e) => updateClaude({ excludeSensitiveFiles: claudeTextToList(e.target.value) })}
+                placeholder=".env&#10;credentials.json&#10;*.key"
+                className="min-h-[120px] bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
+              />
+            </label>
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <h3 className="text-sm font-semibold text-zinc-200">Extra Arguments</h3>
+          <label className="flex flex-col gap-2 text-sm text-zinc-300">
+            Additional CLI arguments
+            <input
+              type="text"
+              value={claudeSettings.args}
+              onChange={(e) => updateClaude({ args: e.target.value })}
+              placeholder="--max-tokens 2048 --custom-flag"
+              className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
+            />
+          </label>
+        </section>
+          </>
+        )}
       </div>
     </div>
   );

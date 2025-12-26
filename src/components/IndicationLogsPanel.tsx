@@ -18,8 +18,8 @@ export const IndicationLogsPanel: React.FC<IndicationLogsPanelProps> = ({
   logs,
   onClear,
   onClose,
-  onPopOut,
-  isDetached = false,
+  onPopOut: _onPopOut,
+  isDetached: _isDetached = false,
   showHeader = true,
 }) => {
   const visibleLogs = useMemo(() => logs, [logs]);
