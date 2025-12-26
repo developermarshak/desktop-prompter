@@ -756,6 +756,48 @@ const App: React.FC = () => {
     );
   }, []);
 
+  const handleRenameTemplate = useCallback((templateId: string, name: string) => {
+    // Try to update in custom templates first
+    setCustomTemplates((prev) => {
+      const template = prev.find((t) => t.id === templateId);
+      if (template) {
+        return prev.map((t) => (t.id === templateId ? { ...t, name } : t));
+      }
+      return prev;
+    });
+
+    // If not in custom templates, update in modified default templates
+    setModifiedDefaultTemplates((prev) => {
+      const baseTemplate =
+        prev.find((t) => t.id === templateId) ||
+        DEFAULT_TEMPLATES.find((t) => t.id === templateId);
+
+      if (!baseTemplate) return prev;
+
+      const updatedTemplate = { ...baseTemplate, name };
+      const idx = prev.findIndex((t) => t.id === templateId);
+      if (idx !== -1) {
+        const next = [...prev];
+        next[idx] = updatedTemplate;
+        return next;
+      }
+      return [...prev, updatedTemplate];
+    });
+
+    // Update draft title if this is the active template
+    if (activeTemplateId === templateId) {
+      setDraftTitle(name);
+    }
+  }, [activeTemplateId]);
+
+  const handleRenameSavedPrompt = useCallback((promptId: string, title: string) => {
+    setSavedPrompts((prev) =>
+      prev.map((p) =>
+        p.id === promptId ? { ...p, title, updatedAt: Date.now() } : p
+      )
+    );
+  }, []);
+
   const handleCloseTerminalTab = (tabId: string) => {
     setTerminalWaitingTabs((prev) => {
       if (!prev.has(tabId)) {
@@ -1063,9 +1105,11 @@ How can I improve this snippet?`;
       onSelectTemplate={handleSelectTemplate}
       onDeleteTemplate={handleDeleteTemplate}
       onDuplicateTemplate={handleDuplicateTemplate}
+      onRenameTemplate={handleRenameTemplate}
       onSelectSavedPrompt={handleSelectSavedPrompt}
       onDeleteSavedPrompt={handleDeleteSavedPrompt}
       onDuplicatePrompt={handleDuplicatePrompt}
+      onRenameSavedPrompt={handleRenameSavedPrompt}
       onRestoreTemplate={handleRestoreTemplate}
       onRestorePrompt={handleRestorePrompt}
       onToggleArchive={() => setShowArchive(!showArchive)}

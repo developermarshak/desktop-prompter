@@ -6,7 +6,6 @@ import { Terminal, type IDisposable } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { TerminalTab, CLIStatus } from "../types";
 import { drainTerminalWrites, subscribeTerminalQueue } from "../terminalQueue";
-import { ExternalLink } from "lucide-react";
 import { loadTerminalFontSize, saveTerminalFontSize } from "../utils/appSettings";
 
 type TerminalPanelProps = {
@@ -400,15 +399,6 @@ export const TerminalPanel = ({
               title={logsOpen ? 'Hide indication logs' : 'Show indication logs'}
             >
               Logs
-            </button>
-          )}
-          {runningInTauri && !isDetached && onPopOut && (
-            <button
-              onClick={onPopOut}
-              className="p-1 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
-              title="Open in new window"
-            >
-              <ExternalLink size={12} />
             </button>
           )}
         </div>

@@ -21,9 +21,11 @@ interface SidebarProps {
   onSelectTemplate: (template: PromptTemplate) => void;
   onDeleteTemplate: (id: string) => void;
   onDuplicateTemplate: (template: PromptTemplate) => void;
+  onRenameTemplate: (id: string, name: string) => void;
   onSelectSavedPrompt: (prompt: SavedPrompt) => void;
   onDeleteSavedPrompt: (id: string) => void;
   onDuplicatePrompt: (prompt: SavedPrompt) => void;
+  onRenameSavedPrompt: (id: string, title: string) => void;
   onRestoreTemplate: (template: PromptTemplate) => void;
   onRestorePrompt: (prompt: SavedPrompt) => void;
   onToggleArchive: () => void;
@@ -52,9 +54,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectTemplate,
   onDeleteTemplate,
   onDuplicateTemplate,
+  onRenameTemplate,
   onSelectSavedPrompt,
   onDeleteSavedPrompt,
   onDuplicatePrompt,
+  onRenameSavedPrompt,
   onRestoreTemplate,
   onRestorePrompt,
   onToggleArchive,
@@ -67,6 +71,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const [editingTerminalTabId, setEditingTerminalTabId] = useState<string | null>(null);
   const [terminalTitleDraft, setTerminalTitleDraft] = useState('');
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [templateNameDraft, setTemplateNameDraft] = useState('');
+  const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
+  const [promptTitleDraft, setPromptTitleDraft] = useState('');
 
   const beginTerminalRename = (tab: TerminalTab) => {
     setEditingTerminalTabId(tab.id);
@@ -90,6 +98,50 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setTerminalTitleDraft('');
   };
 
+  const beginTemplateRename = (template: PromptTemplate) => {
+    setEditingTemplateId(template.id);
+    setTemplateNameDraft(template.name);
+  };
+
+  const commitTemplateRename = () => {
+    if (!editingTemplateId) {
+      return;
+    }
+    const nextName = templateNameDraft.trim();
+    if (nextName.length > 0) {
+      onRenameTemplate(editingTemplateId, nextName);
+    }
+    setEditingTemplateId(null);
+    setTemplateNameDraft('');
+  };
+
+  const cancelTemplateRename = () => {
+    setEditingTemplateId(null);
+    setTemplateNameDraft('');
+  };
+
+  const beginPromptRename = (prompt: SavedPrompt) => {
+    setEditingPromptId(prompt.id);
+    setPromptTitleDraft(prompt.title);
+  };
+
+  const commitPromptRename = () => {
+    if (!editingPromptId) {
+      return;
+    }
+    const nextTitle = promptTitleDraft.trim();
+    if (nextTitle.length > 0) {
+      onRenameSavedPrompt(editingPromptId, nextTitle);
+    }
+    setEditingPromptId(null);
+    setPromptTitleDraft('');
+  };
+
+  const cancelPromptRename = () => {
+    setEditingPromptId(null);
+    setPromptTitleDraft('');
+  };
+
   // Unified list: Custom templates first, then System templates
   const unifiedTemplates = [...templates].sort((a, b) => {
     // Priority: Custom > System
@@ -108,7 +160,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <LayoutTemplate className="w-2.5 h-2.5" /> Snippets
           </h2>
           <div className="space-y-0">
-            {unifiedTemplates.map((t) => (
+            {unifiedTemplates.map((t) => {
+              const isEditing = editingTemplateId === t.id;
+              return (
                <div
                     key={t.id}
                     className={`group flex items-center justify-between px-2 py-1.5 text-xs transition-colors cursor-pointer ${
@@ -117,10 +171,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
                     }`}
                     onClick={() => onSelectTemplate(t)}
+                    onDoubleClick={() => beginTemplateRename(t)}
                 >
                     <div className="flex items-center gap-1.5 flex-1 min-w-0">
                         {t.category === 'custom' && <FileBadge className="w-2.5 h-2.5 text-indigo-400 shrink-0" />}
-                        <span className="truncate">{t.name}</span>
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={templateNameDraft}
+                            onChange={(event) => setTemplateNameDraft(event.target.value)}
+                            onBlur={commitTemplateRename}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                commitTemplateRename();
+                              }
+                              if (event.key === 'Escape') {
+                                cancelTemplateRename();
+                              }
+                            }}
+                            onClick={(event) => event.stopPropagation()}
+                            onDoubleClick={(event) => event.stopPropagation()}
+                            className="w-full bg-zinc-900/70 border border-zinc-700 rounded px-1 py-0.5 text-xs text-zinc-200 focus:outline-none focus:ring-0"
+                            autoFocus
+                          />
+                        ) : (
+                          <span className="truncate">{t.name}</span>
+                        )}
                     </div>
                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all shrink-0">
                         <button
@@ -145,7 +221,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         </button>
                     </div>
                 </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -171,19 +248,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
             ) : (
               savedPrompts.map((p) => {
                 const isActive = p.id === activePromptId;
+                const isEditing = editingPromptId === p.id;
                 return (
                   <div
                     key={p.id}
                     onClick={() => onSelectSavedPrompt(p)}
+                    onDoubleClick={() => beginPromptRename(p)}
                     className={`group flex items-center justify-between px-2 py-1.5 text-xs transition-colors cursor-pointer ${
                         isActive
                         ? 'bg-zinc-800 text-white'
                         : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
                     }`}
                   >
-                    <span className="flex-1 truncate mr-1">
-                      {p.title || 'Untitled Prompt'}
-                    </span>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={promptTitleDraft}
+                        onChange={(event) => setPromptTitleDraft(event.target.value)}
+                        onBlur={commitPromptRename}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            commitPromptRename();
+                          }
+                          if (event.key === 'Escape') {
+                            cancelPromptRename();
+                          }
+                        }}
+                        onClick={(event) => event.stopPropagation()}
+                        onDoubleClick={(event) => event.stopPropagation()}
+                        className="flex-1 bg-zinc-900/70 border border-zinc-700 rounded px-1 py-0.5 text-xs text-zinc-200 focus:outline-none focus:ring-0 mr-1"
+                        autoFocus
+                      />
+                    ) : (
+                      <span className="flex-1 truncate mr-1">
+                        {p.title || 'Untitled Prompt'}
+                      </span>
+                    )}
                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all shrink-0">
                         <button
                           onClick={(e) => {

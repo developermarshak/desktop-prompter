@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { ExternalLink, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { CLIStatusLogEntry } from '../types';
 
 interface IndicationLogsPanelProps {
@@ -40,15 +40,6 @@ export const IndicationLogsPanel: React.FC<IndicationLogsPanelProps> = ({
                 title="Clear logs"
               >
                 Clear
-              </button>
-            )}
-            {onPopOut && !isDetached && (
-              <button
-                onClick={onPopOut}
-                className="p-1 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
-                title="Open in new window"
-              >
-                <ExternalLink size={12} />
               </button>
             )}
             {onClose && (
