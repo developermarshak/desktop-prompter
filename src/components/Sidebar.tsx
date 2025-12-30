@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { PromptTemplate, SavedPrompt, TerminalTab, CLIStatus } from '../types';
-import { LayoutTemplate, Plus, Trash2, Clock, FileBadge, Archive, RotateCcw, Copy, Settings, Terminal, X } from 'lucide-react';
+import { LayoutTemplate, Plus, Trash2, Clock, FileBadge, Archive, RotateCcw, Copy, Settings, Terminal, X, Bot } from 'lucide-react';
 
 interface SidebarProps {
   templates: PromptTemplate[];
@@ -33,6 +33,8 @@ interface SidebarProps {
   isOpen: boolean;
   activeView: 'editor' | 'settings';
   onOpenSettings: () => void;
+  claudeSessionOpen?: boolean;
+  onToggleClaudeSession?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -66,6 +68,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   activeView,
   onOpenSettings,
+  claudeSessionOpen,
+  onToggleClaudeSession,
 }) => {
   if (!isOpen) return null;
 
@@ -504,7 +508,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      <div className="border-t border-zinc-800 p-1.5">
+      <div className="border-t border-zinc-800 p-1.5 space-y-1">
+        {onToggleClaudeSession && (
+          <button
+            onClick={onToggleClaudeSession}
+            className={`w-full flex items-center gap-1.5 px-2 py-1.5 text-xs transition-colors ${
+              claudeSessionOpen
+                ? 'bg-indigo-600 text-white'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+            }`}
+          >
+            <Bot className="w-3.5 h-3.5" />
+            Claude Session
+          </button>
+        )}
         <button
           onClick={onOpenSettings}
           className={`w-full flex items-center gap-1.5 px-2 py-1.5 text-xs transition-colors ${

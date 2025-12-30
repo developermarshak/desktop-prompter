@@ -1,6 +1,7 @@
 import { ClaudeSettings } from './types';
 
 export const DEFAULT_CLAUDE_SETTINGS: ClaudeSettings = {
+  cliPath: 'claude',
   model: '',
   systemPrompt: '',
   systemPromptFile: '',

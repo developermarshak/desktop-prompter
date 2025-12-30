@@ -82,6 +82,7 @@ export interface CodexSettings {
 }
 
 export interface ClaudeSettings {
+  cliPath: string;
   model: string;
   systemPrompt: string;
   systemPromptFile: string;

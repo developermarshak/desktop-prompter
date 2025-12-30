@@ -36,6 +36,9 @@
     }
   },
   "plugins": {
+    "shell": {
+      "open": true
+    },
     "sql": {
       "preload": [
         "sqlite:app_config.db"

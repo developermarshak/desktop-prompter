@@ -16,6 +16,7 @@ import { Chat } from "@google/genai";
 import { Menu } from "lucide-react";
 import { generateTitleFromContent } from "./utils";
 import { TerminalPanel } from "./components/TerminalPanel";
+import { ClaudeSessionPanel } from "./components/claude";
 import { CodexSettingsPanel } from "./components/CodexSettings";
 import { DEFAULT_CODEX_SETTINGS, coerceCodexSettings } from "./codexSettings";
 import { DEFAULT_CLAUDE_SETTINGS, coerceClaudeSettings } from "./claudeSettings";
@@ -118,6 +119,7 @@ const App: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [chatOpen, setChatOpen] = useState(false); // Default to closed for cleaner UI
   const [terminalOpen, setTerminalOpen] = useState(false);
+  const [claudeSessionOpen, setClaudeSessionOpen] = useState(false);
   const [terminalTabs, setTerminalTabs] = useState<TerminalTab[]>(() => []);
   const [activeTerminalTabId, setActiveTerminalTabId] = useState<string | null>(
     null
@@ -1159,6 +1161,8 @@ const App: React.FC = () => {
       onOpenSettings={() =>
         setActiveView((prev) => (prev === "settings" ? "editor" : "settings"))
       }
+      claudeSessionOpen={claudeSessionOpen}
+      onToggleClaudeSession={() => setClaudeSessionOpen((prev) => !prev)}
     />
   );
 
@@ -1283,6 +1287,27 @@ const App: React.FC = () => {
                   >
                     <div className="h-full bg-zinc-950 border-t border-zinc-800">
                       {terminalContent}
+                    </div>
+                  </ResizablePanel>
+                </>
+              )}
+
+              {claudeSessionOpen && (
+                <>
+                  <Separator className="h-1 bg-zinc-800 hover:bg-indigo-500 transition-colors cursor-row-resize" />
+                  {/* Claude Session Panel */}
+                  <ResizablePanel
+                    id="claude-session"
+                    defaultSize="40%"
+                    minSize="20%"
+                    maxSize="80%"
+                    collapsible={true}
+                  >
+                    <div className="h-full bg-zinc-950 border-t border-zinc-800">
+                      <ClaudeSessionPanel
+                      cliPath={claudeSettings.cliPath}
+                      onOpenSettings={() => setActiveView("settings")}
+                    />
                     </div>
                   </ResizablePanel>
                 </>

@@ -11,6 +11,31 @@
     "allow-spawn-pty",
     "allow-write-pty",
     "allow-resize-pty",
-    "allow-close-pty"
+    "allow-close-pty",
+    "shell:allow-open",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        { "name": "claude", "cmd": "claude", "args": true },
+        { "name": "claude-full-path", "cmd": "/Users/mykytamarshak/.n/bin/claude", "args": true },
+        { "name": "which-claude", "cmd": "which", "args": ["claude"] },
+        { "name": "test-claude", "cmd": "/Users/mykytamarshak/.n/bin/claude", "args": ["--version"] },
+        { "name": "sh", "cmd": "sh", "args": true },
+        { "name": "test-sh", "cmd": "sh", "args": ["-c", "exit 0"] }
+      ]
+    },
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        { "name": "claude", "cmd": "claude", "args": true },
+        { "name": "claude-full-path", "cmd": "/Users/mykytamarshak/.n/bin/claude", "args": true },
+        { "name": "which-claude", "cmd": "which", "args": ["claude"] },
+        { "name": "test-claude", "cmd": "/Users/mykytamarshak/.n/bin/claude", "args": ["--version"] },
+        { "name": "sh", "cmd": "sh", "args": true },
+        { "name": "test-sh", "cmd": "sh", "args": ["-c", "exit 0"] }
+      ]
+    },
+    "shell:allow-stdin-write",
+    "shell:allow-kill"
   ]
 }
