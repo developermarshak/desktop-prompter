@@ -3,7 +3,8 @@ import { ClaudeSettings, CodexSettings, PromptTemplate, SavedPrompt } from '../.
 import { DEFAULT_CODEX_SETTINGS } from '../../codexSettings';
 import { DEFAULT_CLAUDE_SETTINGS } from '../../claudeSettings';
 import { resolvePromptRefs } from '../../utils';
-import { open } from '@tauri-apps/plugin-dialog';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { isTauri } from '@tauri-apps/api/core';
 import { enqueueTerminalWrite } from '../../terminalQueue';
 
@@ -180,12 +181,35 @@ export const useToolIntegration = ({
     setShowDirectoryModal(true);
   };
 
+  const handleOpenInWeb = (target: 'chatgpt' | 'claude') => {
+    const resolvedContent = resolvePromptRefs(value, templates, savedPrompts);
+
+    if (!resolvedContent.trim()) {
+      alert('Please write a prompt first.');
+      return;
+    }
+
+    const encodedPrompt = encodeURIComponent(resolvedContent);
+    const url = target === 'chatgpt'
+      ? `https://chatgpt.com/?q=${encodedPrompt}`
+      : `https://claude.ai/?q=${encodedPrompt}`;
+    setShowRunDropdown(false);
+    if (isTauri()) {
+      void openUrl(url);
+      return;
+    }
+    const opened = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!opened) {
+      window.location.href = url;
+    }
+  };
+
   const handleBrowseDirectory = async () => {
     const runningInTauri = isTauri();
 
     if (runningInTauri) {
       try {
-        const selection = await open({ directory: true, multiple: false });
+        const selection = await openDialog({ directory: true, multiple: false });
         if (typeof selection === 'string' && selection) {
           setSelectedDirectory(selection);
         }
@@ -266,6 +290,7 @@ export const useToolIntegration = ({
     setSelectedTool,
     setSelectedDirectory,
     handleRunWithTool,
+    handleOpenInWeb,
     handleBrowseDirectory,
     handleConfirmRun,
   };

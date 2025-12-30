@@ -14,7 +14,7 @@ import {
 import { createChatSession, sendMessageStream } from "./services/geminiService";
 import { Chat } from "@google/genai";
 import { Menu } from "lucide-react";
-import { resolvePromptRefs, generateTitleFromContent } from "./utils";
+import { generateTitleFromContent } from "./utils";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { CodexSettingsPanel } from "./components/CodexSettings";
 import { DEFAULT_CODEX_SETTINGS, coerceCodexSettings } from "./codexSettings";
@@ -1054,28 +1054,6 @@ const App: React.FC = () => {
     }
   };
 
-  const handleImproveSelection = useCallback(
-    (selection: string) => {
-      if (!chatOpen) setChatOpen(true);
-
-      const expandedSelection = resolvePromptRefs(
-        selection,
-        allTemplates,
-        savedPrompts
-      );
-
-      const contextMessage = `I'm working on this specific part of my prompt:
-
-"""
-${expandedSelection}
-"""
-
-How can I improve this snippet?`;
-      handleSendMessage(contextMessage);
-    },
-    [chatOpen, savedPrompts, allTemplates]
-  );
-
   const handleToggleTemplate = useCallback(() => {
     if (isTemplate) {
       // Converting from template to prompt - MOVE not copy
@@ -1203,7 +1181,6 @@ How can I improve this snippet?`;
       saveStatus={saveStatus}
       onChange={setPromptContent}
       onTitleChange={handleTitleChange}
-      onImproveSelection={handleImproveSelection}
       templates={allTemplates}
       savedPrompts={savedPrompts}
       isChatOpen={chatOpen}

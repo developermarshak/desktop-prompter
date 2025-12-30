@@ -14,7 +14,6 @@ interface PromptEditorProps {
   saveStatus?: 'saved' | 'saving' | 'unsaved';
   onChange: (value: string) => void;
   onTitleChange: (newTitle: string) => void;
-  onImproveSelection: (selection: string) => void;
   templates: PromptTemplate[];
   savedPrompts: SavedPrompt[];
   isChatOpen: boolean;
@@ -33,7 +32,6 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
   saveStatus = 'saved',
   onChange,
   onTitleChange,
-  onImproveSelection,
   templates,
   savedPrompts,
   isChatOpen,
@@ -47,7 +45,6 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
 }) => {
   const {
     resolvedCopied,
-    selection,
     isCompact,
     viewMode,
     showSuggestions,
@@ -64,6 +61,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
     toolbarRef,
     handleCopyResolved,
     handleRunWithTool,
+    handleOpenInWeb,
     handleBrowseDirectory,
     handleConfirmRun,
     handleSelect,
@@ -96,7 +94,6 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
         activeTitle={activeTitle}
         saveStatus={saveStatus}
         value={value}
-        selection={selection}
         viewMode={viewMode}
         isTemplate={isTemplate}
         isCompact={isCompact}
@@ -106,10 +103,10 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
         onTitleChange={onTitleChange}
         onToggleTemplate={onToggleTemplate}
         onCopyResolved={handleCopyResolved}
-        onImproveSelection={onImproveSelection}
         onSetViewMode={setViewMode}
         onToggleRunDropdown={() => setShowRunDropdown(!showRunDropdown)}
         onRunWithTool={handleRunWithTool}
+        onOpenInWeb={handleOpenInWeb}
       />
       
       {/* Reference Bar */}

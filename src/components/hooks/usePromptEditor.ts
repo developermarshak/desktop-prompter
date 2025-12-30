@@ -145,6 +145,7 @@ export const usePromptEditor = ({
     setSelectedTool: toolIntegration.setSelectedTool,
     setSelectedDirectory: toolIntegration.setSelectedDirectory,
     handleRunWithTool: toolIntegration.handleRunWithTool,
+    handleOpenInWeb: toolIntegration.handleOpenInWeb,
     handleBrowseDirectory: toolIntegration.handleBrowseDirectory,
     handleConfirmRun: toolIntegration.handleConfirmRun,
     // Refs

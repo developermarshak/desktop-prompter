@@ -1,7 +1,6 @@
 import React, { useRef, useEffect, RefObject } from 'react';
 import {
   CopyCheck,
-  Sparkles,
   LayoutTemplate,
   RefreshCw,
   FileText,
@@ -17,7 +16,6 @@ interface PromptEditorToolbarProps {
   activeTitle?: string;
   saveStatus?: 'saved' | 'saving' | 'unsaved';
   value: string;
-  selection: string;
   viewMode: 'edit' | 'split' | 'preview';
   isTemplate: boolean;
   isCompact: boolean;
@@ -27,17 +25,16 @@ interface PromptEditorToolbarProps {
   onTitleChange: (newTitle: string) => void;
   onToggleTemplate: () => void;
   onCopyResolved: () => void;
-  onImproveSelection: (selection: string) => void;
   onSetViewMode: (mode: 'edit' | 'split' | 'preview') => void;
   onToggleRunDropdown: () => void;
   onRunWithTool: (tool: 'codex' | 'claude') => void;
+  onOpenInWeb: (tool: 'chatgpt' | 'claude') => void;
 }
 
 export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
   activeTitle,
   saveStatus = 'saved',
   value,
-  selection,
   viewMode,
   isTemplate,
   isCompact,
@@ -47,10 +44,10 @@ export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
   onTitleChange,
   onToggleTemplate,
   onCopyResolved,
-  onImproveSelection,
   onSetViewMode,
   onToggleRunDropdown,
   onRunWithTool,
+  onOpenInWeb,
 }) => {
   const runDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -112,16 +109,6 @@ export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
       </div>
 
       <div className="flex items-center gap-3 shrink-0">
-        {selection.length > 0 && viewMode !== 'preview' && (
-          <button
-            onClick={() => onImproveSelection(selection)}
-            className="hidden lg:flex animate-in fade-in slide-in-from-top-1 items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded-md transition-colors mr-2"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            Improve Selection
-          </button>
-        )}
-
         <div className="w-px h-6 bg-zinc-800 mx-1" />
 
         <div className="flex items-center gap-2">
@@ -132,7 +119,7 @@ export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
               }`}>Prompt</span>
               <button
                 onClick={onToggleTemplate}
-                title={isTemplate ? "Save as Template (Click to save as Prompt)" : "Save as Prompt (Click to save as Template)"}
+                title={isTemplate ? "Save as Snippet (Click to save as Prompt)" : "Save as Prompt (Click to save as Snippet)"}
                 className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-zinc-950"
                 role="switch"
                 aria-checked={isTemplate}
@@ -150,7 +137,7 @@ export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
               </button>
               <span className={`text-xs font-medium transition-colors ${
                 isTemplate ? 'text-indigo-400' : 'text-zinc-500'
-              }`}>Template</span>
+              }`}>Snippet</span>
             </>
           ) : (
             <div className="flex items-center gap-1.5">
@@ -159,7 +146,7 @@ export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
               }`} />
               <button
                 onClick={onToggleTemplate}
-                title={isTemplate ? "Save as Template (Click to save as Prompt)" : "Save as Prompt (Click to save as Template)"}
+                title={isTemplate ? "Save as Snippet (Click to save as Prompt)" : "Save as Prompt (Click to save as Snippet)"}
                 className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-zinc-950"
                 role="switch"
                 aria-checked={isTemplate}
@@ -228,6 +215,23 @@ export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
               >
                 <div className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
                 <span>Claude</span>
+              </button>
+              <div className="px-3 py-2 text-xs font-semibold text-zinc-500 border-y border-zinc-800 bg-zinc-950">
+                Open in:
+              </div>
+              <button
+                onClick={() => onOpenInWeb('chatgpt')}
+                className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-3"
+              >
+                <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                <span>ChatGPT.com</span>
+              </button>
+              <button
+                onClick={() => onOpenInWeb('claude')}
+                className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-3"
+              >
+                <div className="w-2 h-2 rounded-full bg-violet-400 shrink-0" />
+                <span>Claude.ai</span>
               </button>
             </div>
           )}
