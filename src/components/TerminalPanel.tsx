@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { FitAddon } from "@xterm/addon-fit";
@@ -7,6 +7,7 @@ import "@xterm/xterm/css/xterm.css";
 import { TerminalTab, CLIStatus } from "../types";
 import { drainTerminalWrites, subscribeTerminalQueue } from "../terminalQueue";
 import { loadTerminalFontSize, saveTerminalFontSize } from "../utils/appSettings";
+import { ClaudeSessionPanel, type SessionStatus } from "./claude";
 
 type TerminalPanelProps = {
   className?: string;
@@ -14,11 +15,15 @@ type TerminalPanelProps = {
   activeTabId: string | null;
   onPopOut?: () => void;
   onToggleLogs?: () => void;
+  onToggleDiff?: () => void;
   logsOpen?: boolean;
+  diffOpen?: boolean;
+  diffAvailable?: boolean;
   isDetached?: boolean;
   onTerminalOutput?: (tabId: string, data: string) => void;
   cliStatus?: CLIStatus;
   onRenameTab?: (tabId: string, title: string) => void;
+  onClaudeStatusChange?: (tabId: string, status: CLIStatus) => void;
 };
 
 type TerminalOutputPayload = {
@@ -56,11 +61,15 @@ export const TerminalPanel = ({
   activeTabId,
   onPopOut: _onPopOut,
   onToggleLogs,
+  onToggleDiff,
   logsOpen = false,
+  diffOpen = false,
+  diffAvailable = false,
   isDetached: _isDetached = false,
   onTerminalOutput,
   cliStatus = 'question',
   onRenameTab,
+  onClaudeStatusChange,
 }: TerminalPanelProps) => {
   const effectiveActiveTabId = activeTabId ?? tabs[0]?.id ?? null;
   const activeTab = useMemo(
@@ -72,6 +81,7 @@ export const TerminalPanel = ({
   const pendingOutputRef = useRef<Map<string, string[]>>(new Map());
   const runningInTauri = isTauri();
   const fontSizeRef = useRef(DEFAULT_FONT_SIZE);
+  const [claudeSessionStatuses, setClaudeSessionStatuses] = useState<Map<string, SessionStatus>>(new Map());
 
   const writeOutput = useCallback((id: string, data: string) => {
     const session = sessionsRef.current.get(id);
@@ -311,6 +321,10 @@ export const TerminalPanel = ({
     });
 
     tabs.forEach((tab) => {
+      // Skip creating terminal sessions for Claude tabs
+      if (tab.type === 'claude') {
+        return;
+      }
       const container = containersRef.current.get(tab.id);
       if (!container) {
         return;
@@ -353,6 +367,45 @@ export const TerminalPanel = ({
     [className],
   );
 
+  const handleClaudeStatusChange = useCallback((tabId: string, status: SessionStatus) => {
+    setClaudeSessionStatuses(prev => {
+      const next = new Map(prev);
+      next.set(tabId, status);
+      return next;
+    });
+
+    // Map SessionStatus to CLIStatus and notify parent
+    if (onClaudeStatusChange) {
+      let cliStatus: CLIStatus;
+      switch (status) {
+        case 'idle': cliStatus = 'question'; break;
+        case 'running': cliStatus = 'working'; break;
+        case 'complete': cliStatus = 'done'; break;
+        case 'error': cliStatus = 'idle'; break;
+        default: cliStatus = 'question';
+      }
+      onClaudeStatusChange(tabId, cliStatus);
+    }
+  }, [onClaudeStatusChange]);
+
+  // Get the effective status for display
+  const getEffectiveStatus = useCallback(() => {
+    if (activeTab?.type === 'claude') {
+      const claudeStatus = claudeSessionStatuses.get(activeTab.id);
+      // Map Claude session status to CLI status
+      switch (claudeStatus) {
+        case 'idle': return 'question';
+        case 'running': return 'working';
+        case 'complete': return 'done';
+        case 'error': return 'idle';
+        default: return cliStatus;
+      }
+    }
+    return cliStatus;
+  }, [activeTab, claudeSessionStatuses, cliStatus]);
+
+  const effectiveStatus = getEffectiveStatus();
+
   const statusColors: Record<CLIStatus, string> = {
     idle: 'bg-yellow-500',
     working: 'bg-blue-500 animate-pulse',
@@ -380,18 +433,42 @@ export const TerminalPanel = ({
               }
               onRenameTab?.(activeTab.id, event.target.value);
             }}
-            placeholder="Terminal"
-            title="Rename terminal tab"
+            placeholder={activeTab?.type === 'claude' ? 'Claude Session' : 'Terminal'}
+            title={activeTab?.type === 'claude' ? 'Rename session tab' : 'Rename terminal tab'}
             disabled={!activeTab || !onRenameTab}
             className="w-40 bg-transparent text-xs font-semibold text-zinc-200 placeholder:text-zinc-700 focus:outline-none focus:ring-0 disabled:text-zinc-600"
           />
           <div
-            className={`w-2 h-2 rounded-full ${statusColors[cliStatus]}`}
-            title={statusTitles[cliStatus]}
+            className={`w-2 h-2 rounded-full ${statusColors[effectiveStatus]}`}
+            title={statusTitles[effectiveStatus]}
           />
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="text-[10px] text-zinc-500">Desktop PTY</div>
+          <div className="text-[10px] text-zinc-500">
+            {activeTab?.type === 'claude' ? 'Claude Session' : 'Desktop PTY'}
+          </div>
+          {onToggleDiff && (
+            <button
+              onClick={onToggleDiff}
+              disabled={!diffAvailable}
+              className={`px-2 py-0.5 text-[10px] transition-colors ${
+                diffAvailable
+                  ? diffOpen
+                    ? 'text-zinc-200 bg-zinc-800 hover:bg-zinc-700'
+                    : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'
+                  : 'text-zinc-700 cursor-not-allowed'
+              }`}
+              title={
+                diffAvailable
+                  ? diffOpen
+                    ? 'Hide git diff'
+                    : 'Show git diff'
+                  : 'Run a session with a project directory to enable diff'
+              }
+            >
+              Diff
+            </button>
+          )}
           {onToggleLogs && (
             <button
               onClick={onToggleLogs}
@@ -416,28 +493,59 @@ export const TerminalPanel = ({
             No terminal tabs.
           </div>
         ) : (
-          tabs.map((tab) => (
-            <div
-              key={tab.id}
-              ref={(el) => {
-                if (el) {
-                  containersRef.current.set(tab.id, el);
-                } else {
-                  containersRef.current.delete(tab.id);
-                }
-              }}
-              onMouseDown={() => {
-                sessionsRef.current.get(tab.id)?.term.focus();
-              }}
-              tabIndex={0}
-              className={`absolute inset-0 transition-opacity ${
-                tab.id === effectiveActiveTabId
-                  ? "opacity-100"
-                  : "opacity-0 pointer-events-none"
-              }`}
-              aria-hidden={tab.id !== effectiveActiveTabId}
-            />
-          ))
+          tabs.map((tab) => {
+            if (tab.type === 'claude') {
+              // Get stored prompt and directory from localStorage
+              const storedPrompt = localStorage.getItem('promptArchitect_claudeSessionPrompt') || undefined;
+              const storedDirectory = localStorage.getItem('promptArchitect_claudeSessionDirectory') || undefined;
+
+              // Render Claude session panel
+              return (
+                <div
+                  key={tab.id}
+                  className={`absolute inset-0 transition-opacity ${
+                    tab.id === effectiveActiveTabId
+                      ? "opacity-100"
+                      : "opacity-0 pointer-events-none"
+                  }`}
+                  aria-hidden={tab.id !== effectiveActiveTabId}
+                >
+                  <ClaudeSessionPanel
+                    key={tab.id}
+                    className="h-full"
+                    tabId={tab.id}
+                    initialPrompt={storedPrompt}
+                    projectPath={storedDirectory}
+                    onStatusChange={handleClaudeStatusChange}
+                  />
+                </div>
+              );
+            }
+
+            // Render regular terminal
+            return (
+              <div
+                key={tab.id}
+                ref={(el) => {
+                  if (el) {
+                    containersRef.current.set(tab.id, el);
+                  } else {
+                    containersRef.current.delete(tab.id);
+                  }
+                }}
+                onMouseDown={() => {
+                  sessionsRef.current.get(tab.id)?.term.focus();
+                }}
+                tabIndex={0}
+                className={`absolute inset-0 transition-opacity ${
+                  tab.id === effectiveActiveTabId
+                    ? "opacity-100"
+                    : "opacity-0 pointer-events-none"
+                }`}
+                aria-hidden={tab.id !== effectiveActiveTabId}
+              />
+            );
+          })
         )}
       </div>
     </div>

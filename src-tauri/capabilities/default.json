@@ -8,10 +8,12 @@
     "opener:default",
     "dialog:allow-open",
     "sql:default",
+    "sql:allow-execute",
     "allow-spawn-pty",
     "allow-write-pty",
     "allow-resize-pty",
     "allow-close-pty",
+    "allow-get-git-diff",
     "shell:allow-open",
     {
       "identifier": "shell:allow-execute",

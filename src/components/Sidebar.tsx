@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { PromptTemplate, SavedPrompt, TerminalTab, CLIStatus } from '../types';
-import { LayoutTemplate, Plus, Trash2, Clock, FileBadge, Archive, RotateCcw, Copy, Settings, Terminal, X, Bot } from 'lucide-react';
+import { LayoutTemplate, Plus, Trash2, Clock, FileBadge, Archive, RotateCcw, Copy, Settings, Terminal, X } from 'lucide-react';
 
 interface SidebarProps {
   templates: PromptTemplate[];
@@ -33,8 +33,6 @@ interface SidebarProps {
   isOpen: boolean;
   activeView: 'editor' | 'settings';
   onOpenSettings: () => void;
-  claudeSessionOpen?: boolean;
-  onToggleClaudeSession?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -68,8 +66,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   activeView,
   onOpenSettings,
-  claudeSessionOpen,
-  onToggleClaudeSession,
 }) => {
   if (!isOpen) return null;
 
@@ -319,16 +315,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         <div className="h-px bg-zinc-800 mx-1.5 my-1" />
 
-        {/* Terminal Tabs Section */}
+        {/* Sessions Tabs Section */}
         <div className="p-2 pt-1.5">
           <div className="flex items-center justify-between mb-1.5 px-1">
             <h2 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
-              <Terminal className="w-2.5 h-2.5" /> Terminal Tabs
+              <Terminal className="w-2.5 h-2.5" /> Sessions Tabs
             </h2>
             <button
               onClick={onNewTerminalTab}
               className="p-0.5 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
-              title="New Terminal Tab"
+              title="New Session Tab"
             >
               <Plus className="w-3 h-3" />
             </button>
@@ -336,7 +332,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="space-y-0">
             {terminalTabs.length === 0 ? (
               <p className="text-zinc-600 text-[10px] italic px-2">
-                No terminal tabs yet.
+                No sessions yet.
               </p>
             ) : (
               terminalTabs.map((tab) => {
@@ -509,19 +505,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       <div className="border-t border-zinc-800 p-1.5 space-y-1">
-        {onToggleClaudeSession && (
-          <button
-            onClick={onToggleClaudeSession}
-            className={`w-full flex items-center gap-1.5 px-2 py-1.5 text-xs transition-colors ${
-              claudeSessionOpen
-                ? 'bg-indigo-600 text-white'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-            }`}
-          >
-            <Bot className="w-3.5 h-3.5" />
-            Claude Session
-          </button>
-        )}
         <button
           onClick={onOpenSettings}
           className={`w-full flex items-center gap-1.5 px-2 py-1.5 text-xs transition-colors ${

@@ -1,8 +1,10 @@
+use git2::{Delta, DiffOptions, Oid, Repository};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use serde::Serialize;
 use std::{
     collections::HashMap,
     io::{Read, Write},
+    path::Path,
     sync::Mutex,
 };
 use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -11,6 +13,23 @@ use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 struct TerminalOutput {
     id: String,
     data: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitDiffFile {
+    path: String,
+    status: String,
+    old_content: String,
+    new_content: String,
+    is_binary: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitDiffResponse {
+    root: String,
+    files: Vec<GitDiffFile>,
 }
 
 struct PtySession {
@@ -31,6 +50,116 @@ fn shell_command() -> CommandBuilder {
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
         CommandBuilder::new(shell)
     }
+}
+
+fn delta_status_label(status: Delta) -> &'static str {
+    match status {
+        Delta::Added => "added",
+        Delta::Modified => "modified",
+        Delta::Deleted => "deleted",
+        Delta::Renamed => "renamed",
+        Delta::Copied => "copied",
+        Delta::Typechange => "typechange",
+        Delta::Untracked => "untracked",
+        Delta::Conflicted => "conflicted",
+        Delta::Ignored => "ignored",
+        Delta::Unreadable => "unreadable",
+        _ => "unknown",
+    }
+}
+
+fn read_blob_content(repo: &Repository, oid: Oid) -> Option<Vec<u8>> {
+    if oid.is_zero() {
+        return None;
+    }
+    repo.find_blob(oid).ok().map(|blob| blob.content().to_vec())
+}
+
+fn read_workdir_content(root: &Path, rel_path: &str) -> Option<Vec<u8>> {
+    let path = root.join(rel_path);
+    std::fs::read(path).ok()
+}
+
+fn is_binary_content(bytes: &[u8]) -> bool {
+    bytes.iter().any(|byte| *byte == 0)
+}
+
+#[tauri::command]
+fn get_git_diff(path: String) -> Result<GitDiffResponse, String> {
+    let repo = Repository::discover(&path).map_err(|error| error.to_string())?;
+    let root = repo
+        .workdir()
+        .ok_or_else(|| "repository has no working directory".to_string())?;
+
+    let mut diff_opts = DiffOptions::new();
+    diff_opts
+        .include_untracked(true)
+        .recurse_untracked_dirs(true)
+        .include_typechange(true);
+
+    let diff = match repo.head().ok().and_then(|head| head.peel_to_tree().ok()) {
+        Some(tree) => repo
+            .diff_tree_to_workdir_with_index(Some(&tree), Some(&mut diff_opts))
+            .map_err(|error| error.to_string())?,
+        None => repo
+            .diff_index_to_workdir(None, Some(&mut diff_opts))
+            .map_err(|error| error.to_string())?,
+    };
+
+    let mut files = Vec::new();
+    for delta in diff.deltas() {
+        let path = delta
+            .new_file()
+            .path()
+            .or_else(|| delta.old_file().path());
+        let Some(path) = path else {
+            continue;
+        };
+        let path = path.to_string_lossy().to_string();
+
+        let old_bytes = read_blob_content(&repo, delta.old_file().id());
+        let new_bytes = read_workdir_content(root, &path);
+
+        let old_is_binary = old_bytes
+            .as_ref()
+            .map(|bytes| is_binary_content(bytes))
+            .unwrap_or(false);
+        let new_is_binary = new_bytes
+            .as_ref()
+            .map(|bytes| is_binary_content(bytes))
+            .unwrap_or(false);
+        let is_binary = old_is_binary || new_is_binary;
+
+        let old_content = if is_binary {
+            String::new()
+        } else {
+            old_bytes
+                .as_ref()
+                .map(|bytes| String::from_utf8_lossy(bytes).to_string())
+                .unwrap_or_default()
+        };
+        let new_content = if is_binary {
+            String::new()
+        } else {
+            new_bytes
+                .as_ref()
+                .map(|bytes| String::from_utf8_lossy(bytes).to_string())
+                .unwrap_or_default()
+        };
+
+        files.push(GitDiffFile {
+            path,
+            status: delta_status_label(delta.status()).to_string(),
+            old_content,
+            new_content,
+            is_binary,
+        });
+    }
+
+    Ok(GitDiffResponse {
+        root: root.to_string_lossy().to_string(),
+        files,
+    })
 }
 
 #[tauri::command]
@@ -232,6 +361,7 @@ pub fn run() {
             write_pty,
             resize_pty,
             close_pty,
+            get_git_diff,
             create_panel_window,
             close_panel_window
         ])

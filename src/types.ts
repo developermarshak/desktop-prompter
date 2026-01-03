@@ -25,6 +25,7 @@ export interface SavedPrompt {
 export interface TerminalTab {
   id: string;
   title: string;
+  type?: 'terminal' | 'claude';
 }
 
 export type CLIStatus = 'idle' | 'working' | 'question' | 'done';
@@ -93,4 +94,11 @@ export interface ClaudeSettings {
   alwaysThinkingEnabled: boolean;
   excludeSensitiveFiles: string[];
   args: string;
+}
+
+export interface WorktreeSettings {
+  enabled: boolean;
+  prefix: string;
+  autoCleanup: boolean;
+  cleanupAfterHours: number;
 }

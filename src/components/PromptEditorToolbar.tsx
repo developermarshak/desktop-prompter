@@ -27,7 +27,7 @@ interface PromptEditorToolbarProps {
   onCopyResolved: () => void;
   onSetViewMode: (mode: 'edit' | 'split' | 'preview') => void;
   onToggleRunDropdown: () => void;
-  onRunWithTool: (tool: 'codex' | 'claude') => void;
+  onRunWithTool: (tool: 'codex' | 'claude' | 'claude-ui') => void;
   onOpenInWeb: (tool: 'chatgpt' | 'claude') => void;
 }
 
@@ -215,6 +215,13 @@ export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
               >
                 <div className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
                 <span>Claude</span>
+              </button>
+              <button
+                onClick={() => onRunWithTool('claude-ui')}
+                className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-3"
+              >
+                <div className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
+                <span>Claude UI</span>
               </button>
               <div className="px-3 py-2 text-xs font-semibold text-zinc-500 border-y border-zinc-800 bg-zinc-950">
                 Open in:

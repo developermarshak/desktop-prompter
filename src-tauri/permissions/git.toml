@@ -1,0 +1,6 @@
+# Git diff command permissions for the app.
+
+[[permission]]
+identifier = "allow-get-git-diff"
+description = "Enables the get_git_diff command without any pre-configured scope."
+commands.allow = ["get_git_diff"]

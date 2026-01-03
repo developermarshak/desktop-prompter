@@ -1,12 +1,14 @@
 import React, { useRef, useEffect } from 'react';
-import { X, FolderOpen, Play } from 'lucide-react';
+import { X, FolderOpen, Play, GitBranch } from 'lucide-react';
 
 interface RunPromptModalProps {
   show: boolean;
-  selectedTool: 'codex' | 'claude' | null;
+  selectedTool: 'codex' | 'claude' | 'claude-ui' | null;
   selectedDirectory: string;
+  createWorktree: boolean;
   onClose: () => void;
   onDirectoryChange: (dir: string) => void;
+  onCreateWorktreeChange: (value: boolean) => void;
   onBrowseDirectory: () => void;
   onConfirm: () => void;
 }
@@ -15,8 +17,10 @@ export const RunPromptModal: React.FC<RunPromptModalProps> = ({
   show,
   selectedTool,
   selectedDirectory,
+  createWorktree,
   onClose,
   onDirectoryChange,
+  onCreateWorktreeChange,
   onBrowseDirectory,
   onConfirm,
 }) => {
@@ -32,7 +36,7 @@ export const RunPromptModal: React.FC<RunPromptModalProps> = ({
     return null;
   }
 
-  const toolLabel = selectedTool === 'claude' ? 'Claude' : 'Codex';
+  const toolLabel = selectedTool === 'claude-ui' ? 'Claude UI' : selectedTool === 'claude' ? 'Claude' : 'Codex';
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -81,6 +85,27 @@ export const RunPromptModal: React.FC<RunPromptModalProps> = ({
           <p className="text-xs text-zinc-500 mt-2">
             The selected directory will be used when running in the terminal.
           </p>
+
+          {/* Git Worktree Option */}
+          <div className="mt-4 pt-4 border-t border-zinc-800">
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={createWorktree}
+                onChange={(e) => onCreateWorktreeChange(e.target.checked)}
+                className="w-4 h-4 rounded border-zinc-600 bg-zinc-950 text-emerald-500 focus:ring-emerald-500/50 focus:ring-offset-0"
+              />
+              <div className="flex items-center gap-2">
+                <GitBranch className="w-4 h-4 text-zinc-400 group-hover:text-zinc-300" />
+                <span className="text-sm text-zinc-300 group-hover:text-white">
+                  Create git worktree before running
+                </span>
+              </div>
+            </label>
+            <p className="text-xs text-zinc-500 mt-2 ml-7">
+              Creates an isolated copy of the repository from the current branch.
+            </p>
+          </div>
         </div>
         <div className="px-6 py-4 bg-zinc-950/50 border-t border-zinc-800 flex justify-end gap-3">
           <button

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ClaudeSettings, CodexSettings, PromptTemplate, SavedPrompt } from '../types';
+import { ClaudeSettings, CodexSettings, PromptTemplate, SavedPrompt, WorktreeSettings } from '../types';
 import { PromptEditorToolbar } from './PromptEditorToolbar';
 import { PromptEditorReferenceBar } from './PromptEditorReferenceBar';
 import { PromptEditorContent } from './PromptEditorContent';
@@ -17,11 +17,13 @@ interface PromptEditorProps {
   templates: PromptTemplate[];
   savedPrompts: SavedPrompt[];
   isChatOpen: boolean;
-  onRequestTerminal: (title?: string) => string | null;
+  onRequestTerminal: (title?: string, type?: 'terminal' | 'claude') => string | null;
+  onSaveTerminalSessionPath?: (tabId: string, path: string) => void;
   promptTitle?: string;
   activeTerminalTabId?: string | null;
   codexSettings: CodexSettings;
   claudeSettings: ClaudeSettings;
+  worktreeSettings: WorktreeSettings;
   isTemplate: boolean;
   onToggleTemplate: () => void;
 }
@@ -36,10 +38,12 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
   savedPrompts,
   isChatOpen,
   onRequestTerminal,
+  onSaveTerminalSessionPath,
   promptTitle,
   activeTerminalTabId,
   codexSettings,
   claudeSettings,
+  worktreeSettings,
   isTemplate,
   onToggleTemplate
 }) => {
@@ -56,6 +60,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
     showDirectoryModal,
     selectedTool,
     selectedDirectory,
+    createWorktree,
     uniqueRefs,
     textareaRef,
     toolbarRef,
@@ -74,6 +79,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
     setShowDirectoryModal,
     setSelectedTool,
     setSelectedDirectory,
+    setCreateWorktree,
   } = usePromptEditor({
     value,
     templates,
@@ -81,10 +87,12 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
     onChange,
     isChatOpen,
     onRequestTerminal,
+    onSaveTerminalSessionPath,
     promptTitle,
     activeTerminalTabId,
     codexSettings,
     claudeSettings,
+    worktreeSettings,
   });
 
   return (
@@ -153,11 +161,13 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
         show={showDirectoryModal}
         selectedTool={selectedTool}
         selectedDirectory={selectedDirectory}
+        createWorktree={createWorktree}
         onClose={() => {
           setShowDirectoryModal(false);
           setSelectedTool(null);
         }}
         onDirectoryChange={setSelectedDirectory}
+        onCreateWorktreeChange={setCreateWorktree}
         onBrowseDirectory={handleBrowseDirectory}
         onConfirm={handleConfirmRun}
       />

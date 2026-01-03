@@ -1,13 +1,15 @@
 import React from 'react';
-import { ClaudeSettings, CodexSettings } from '../types';
+import { ClaudeSettings, CodexSettings, WorktreeSettings } from '../types';
 import { listToText, textToList } from '../codexSettings';
 import { listToText as claudeListToText, textToList as claudeTextToList } from '../claudeSettings';
 
 interface CodexSettingsProps {
   settings: CodexSettings;
   claudeSettings: ClaudeSettings;
+  worktreeSettings: WorktreeSettings;
   onChange: (next: CodexSettings) => void;
   onClaudeChange: (next: ClaudeSettings) => void;
+  onWorktreeChange: (next: WorktreeSettings) => void;
   onClose: () => void;
   onReset: () => void;
 }
@@ -15,12 +17,14 @@ interface CodexSettingsProps {
 export const CodexSettingsPanel: React.FC<CodexSettingsProps> = ({
   settings,
   claudeSettings,
+  worktreeSettings,
   onChange,
   onClaudeChange,
+  onWorktreeChange,
   onClose,
   onReset,
 }) => {
-  const [activeTab, setActiveTab] = React.useState<'codex' | 'claude'>('codex');
+  const [activeTab, setActiveTab] = React.useState<'codex' | 'claude' | 'worktree'>('codex');
 
   const update = (patch: Partial<CodexSettings>) => {
     onChange({ ...settings, ...patch });
@@ -28,6 +32,10 @@ export const CodexSettingsPanel: React.FC<CodexSettingsProps> = ({
 
   const updateClaude = (patch: Partial<ClaudeSettings>) => {
     onClaudeChange({ ...claudeSettings, ...patch });
+  };
+
+  const updateWorktree = (patch: Partial<WorktreeSettings>) => {
+    onWorktreeChange({ ...worktreeSettings, ...patch });
   };
 
   return (
@@ -76,6 +84,16 @@ export const CodexSettingsPanel: React.FC<CodexSettingsProps> = ({
             }`}
           >
             Claude
+          </button>
+          <button
+            onClick={() => setActiveTab('worktree')}
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+              activeTab === 'worktree'
+                ? 'text-white border-indigo-500'
+                : 'text-zinc-400 border-transparent hover:text-zinc-200'
+            }`}
+          >
+            Git Worktree
           </button>
         </div>
       </div>
@@ -312,7 +330,7 @@ export const CodexSettingsPanel: React.FC<CodexSettingsProps> = ({
           </div>
         </section>
           </>
-        ) : (
+        ) : activeTab === 'claude' ? (
           <>
         <section className="space-y-4">
           <h3 className="text-sm font-semibold text-zinc-200">CLI Configuration</h3>
@@ -452,7 +470,74 @@ export const CodexSettingsPanel: React.FC<CodexSettingsProps> = ({
           </label>
         </section>
           </>
-        )}
+        ) : activeTab === 'worktree' ? (
+          <>
+        <section className="space-y-4">
+          <h3 className="text-sm font-semibold text-zinc-200">Git Worktree Settings</h3>
+          <p className="text-sm text-zinc-400">
+            When enabled, a new git worktree will be created from the current branch before starting a terminal session.
+            This allows you to work on isolated copies of your repository.
+          </p>
+          <div className="flex flex-wrap gap-4 text-sm text-zinc-300">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={worktreeSettings.enabled}
+                onChange={(e) => updateWorktree({ enabled: e.target.checked })}
+              />
+              Enable worktree creation by default
+            </label>
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <h3 className="text-sm font-semibold text-zinc-200">Worktree Naming</h3>
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="flex flex-col gap-2 text-sm text-zinc-300">
+              Worktree name prefix
+              <input
+                type="text"
+                value={worktreeSettings.prefix}
+                onChange={(e) => updateWorktree({ prefix: e.target.value })}
+                placeholder="wt-"
+                className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
+              />
+              <span className="text-xs text-zinc-500">
+                Prefix for generated worktree names (e.g., "wt-" results in "wt-abc123")
+              </span>
+            </label>
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <h3 className="text-sm font-semibold text-zinc-200">Cleanup</h3>
+          <div className="flex flex-wrap gap-4 text-sm text-zinc-300">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={worktreeSettings.autoCleanup}
+                onChange={(e) => updateWorktree({ autoCleanup: e.target.checked })}
+              />
+              Auto-cleanup old worktrees
+            </label>
+          </div>
+          {worktreeSettings.autoCleanup && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="flex flex-col gap-2 text-sm text-zinc-300">
+                Cleanup worktrees older than (hours)
+                <input
+                  type="number"
+                  min="1"
+                  value={worktreeSettings.cleanupAfterHours}
+                  onChange={(e) => updateWorktree({ cleanupAfterHours: parseInt(e.target.value, 10) || 24 })}
+                  className="bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
+                />
+              </label>
+            </div>
+          )}
+        </section>
+          </>
+        ) : null}
       </div>
     </div>
   );

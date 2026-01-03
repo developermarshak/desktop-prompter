@@ -6,7 +6,7 @@ import {
   type ChangeEvent,
   type KeyboardEvent,
 } from 'react';
-import { ClaudeSettings, CodexSettings, PromptTemplate, SavedPrompt } from '../../types';
+import { ClaudeSettings, CodexSettings, PromptTemplate, SavedPrompt, WorktreeSettings } from '../../types';
 import { resolvePromptRefs, extractUniqueRefs } from '../../utils';
 import { useAutocomplete } from './useAutocomplete';
 import { useReferenceInspection } from './useReferenceInspection';
@@ -19,10 +19,12 @@ interface UsePromptEditorProps {
   onChange: (value: string) => void;
   isChatOpen: boolean;
   onRequestTerminal?: (title?: string) => string | null;
+  onSaveTerminalSessionPath?: (tabId: string, path: string) => void;
   promptTitle?: string;
   activeTerminalTabId?: string | null;
   codexSettings: CodexSettings;
   claudeSettings: ClaudeSettings;
+  worktreeSettings: WorktreeSettings;
 }
 
 export const usePromptEditor = ({
@@ -32,10 +34,12 @@ export const usePromptEditor = ({
   onChange,
   isChatOpen,
   onRequestTerminal,
+  onSaveTerminalSessionPath,
   promptTitle,
   activeTerminalTabId,
   codexSettings,
   claudeSettings,
+  worktreeSettings,
 }: UsePromptEditorProps) => {
   const [resolvedCopied, setResolvedCopied] = useState(false);
   const [selection, setSelection] = useState('');
@@ -54,10 +58,12 @@ export const usePromptEditor = ({
     templates,
     savedPrompts,
     onRunInTerminal: onRequestTerminal,
+    onSaveSessionPath: onSaveTerminalSessionPath,
     promptTitle,
     terminalTabId: activeTerminalTabId,
     codexSettings,
     claudeSettings,
+    worktreeSettings,
   });
 
   // Autocomplete Hook
@@ -138,12 +144,14 @@ export const usePromptEditor = ({
     showDirectoryModal: toolIntegration.showDirectoryModal,
     selectedTool: toolIntegration.selectedTool,
     selectedDirectory: toolIntegration.selectedDirectory,
+    createWorktree: toolIntegration.createWorktree,
     runDropdownRef: toolIntegration.runDropdownRef,
     directoryInputRef: toolIntegration.directoryInputRef,
     setShowRunDropdown: toolIntegration.setShowRunDropdown,
     setShowDirectoryModal: toolIntegration.setShowDirectoryModal,
     setSelectedTool: toolIntegration.setSelectedTool,
     setSelectedDirectory: toolIntegration.setSelectedDirectory,
+    setCreateWorktree: toolIntegration.setCreateWorktree,
     handleRunWithTool: toolIntegration.handleRunWithTool,
     handleOpenInWeb: toolIntegration.handleOpenInWeb,
     handleBrowseDirectory: toolIntegration.handleBrowseDirectory,

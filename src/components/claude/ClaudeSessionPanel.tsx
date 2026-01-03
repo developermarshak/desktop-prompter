@@ -1,7 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Command } from "@tauri-apps/plugin-shell";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { Command, type Child } from "@tauri-apps/plugin-shell";
 import {
   Send,
   Loader2,
@@ -23,18 +21,24 @@ import type { ClaudeStreamMessage } from "@/types/claude";
 
 interface ClaudeSessionPanelProps {
   className?: string;
+  tabId?: string;
   projectPath?: string;
   cliPath?: string;
+  initialPrompt?: string;
   onOpenSettings?: () => void;
+  onStatusChange?: (tabId: string, status: SessionStatus) => void;
 }
 
-type SessionStatus = "idle" | "running" | "error" | "complete";
+export type SessionStatus = "idle" | "running" | "error" | "complete";
 
 export const ClaudeSessionPanel: React.FC<ClaudeSessionPanelProps> = ({
   className,
+  tabId,
   projectPath,
   cliPath = "claude",
+  initialPrompt,
   onOpenSettings,
+  onStatusChange,
 }) => {
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<ClaudeStreamMessage[]>([]);
@@ -43,10 +47,18 @@ export const ClaudeSessionPanel: React.FC<ClaudeSessionPanelProps> = ({
   const [claudeAvailable, setClaudeAvailable] = useState<boolean | null>(null);
   const [checkKey, setCheckKey] = useState(0);
 
-  const ptyIdRef = useRef<string | null>(null);
+  const childProcessRef = useRef<Child | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const jsonBufferRef = useRef<string>("");
+  const hasAutoRunRef = useRef(false);
+
+  // Notify parent of status changes
+  useEffect(() => {
+    if (tabId) {
+      onStatusChange?.(tabId, status);
+    }
+  }, [tabId, status, onStatusChange]);
 
   // Check if claude is available
   useEffect(() => {
@@ -110,109 +122,112 @@ export const ClaudeSessionPanel: React.FC<ClaudeSessionPanelProps> = ({
     }
   }, [parseJsonLine]);
 
-
-  // Run Claude Code with streaming via PTY
-  const runClaude = async () => {
-    if (!prompt.trim() || status === "running") return;
+  // Run Claude Code using Tauri Command API (not PTY)
+  const runClaudeWithPrompt = useCallback(async (promptText: string) => {
+    if (!promptText.trim() || status === "running") return;
 
     setStatus("running");
     setError(null);
     jsonBufferRef.current = "";
 
     try {
-      // Generate unique PTY ID
-      const ptyId = crypto.randomUUID();
-      ptyIdRef.current = ptyId;
-
-      // Build full command with arguments
+      // Build arguments
       const args = ["-p", "--verbose", "--output-format", "stream-json"];
-      if (projectPath) {
-        args.push("--cwd", projectPath);
-      }
-      args.push(prompt.trim());
+      args.push(promptText.trim());
 
-      const fullCommand = `${cliPath} ${args.map(a => a.includes(' ') ? `'${a}'` : a).join(' ')}`;
+      console.log("[Claude Run] Spawning command:", cliPath, args, "cwd:", projectPath);
 
-      console.log("[Claude Run] Spawning PTY:", fullCommand);
+      // Create and spawn the command directly (not via PTY)
+      // Pass cwd as an option if projectPath is specified
+      const command = projectPath
+        ? Command.create(cliPath, args, { cwd: projectPath })
+        : Command.create(cliPath, args);
 
-      // Listen for output BEFORE spawning (using correct event names)
-      const unlistenOutput = await listen<{ id: string; data: string }>("terminal-output", (event) => {
-        // Only handle output from our PTY
-        if (event.payload.id === ptyId) {
-          console.log("[Claude Run] Received output chunk, length:", event.payload.data.length);
-          handlePtyData(event.payload.data);
-        }
+      // Handle stdout
+      command.stdout.on("data", (data: string) => {
+        console.log("[Claude Run] stdout chunk, length:", data.length);
+        handlePtyData(data);
       });
 
-      const unlistenExit = await listen<{ id: string; code: number }>("terminal-exit", (event) => {
-        // Only handle exit from our PTY
-        if (event.payload.id !== ptyId) return;
+      // Handle stderr (might have useful output)
+      command.stderr.on("data", (data: string) => {
+        console.log("[Claude Run] stderr:", data);
+      });
 
-        console.log("[Claude Run] PTY exited with code:", event.payload.code);
+      // Handle close event
+      command.on("close", (data) => {
+        console.log("[Claude Run] Command exited with code:", data.code);
 
         // Parse any remaining buffer
         if (jsonBufferRef.current.trim()) {
           parseJsonLine(jsonBufferRef.current);
         }
 
-        if (event.payload.code === 0) {
+        if (data.code === 0) {
           setStatus("complete");
         } else {
           setStatus("error");
-          setError(`Claude exited with code ${event.payload.code}`);
+          setError(`Claude exited with code ${data.code ?? 'unknown'}`);
         }
 
-        // Cleanup
-        ptyIdRef.current = null;
-        unlistenOutput();
-        unlistenExit();
+        childProcessRef.current = null;
       });
 
-      // Spawn PTY (starts a shell)
-      await invoke("spawn_pty", {
-        id: ptyId,
-        cols: 120,
-        rows: 30,
+      // Handle error event
+      command.on("error", (error: string) => {
+        console.error("[Claude Run] Command error:", error);
+        setStatus("error");
+        setError(error);
+        childProcessRef.current = null;
       });
 
-      console.log("[Claude Run] PTY spawned, writing command...");
+      // Spawn the process
+      const child = await command.spawn();
+      childProcessRef.current = child;
 
-      // Write the command to the PTY
-      await invoke("write_pty", {
-        id: ptyId,
-        data: fullCommand + "\n",
-      });
-
-      console.log("[Claude Run] Command written to PTY");
+      console.log("[Claude Run] Command spawned with PID:", child.pid);
 
       setPrompt("");
     } catch (err) {
       console.error("[Claude Run] Exception during execution:", err);
       setStatus("error");
       setError(err instanceof Error ? err.message : String(err));
-      ptyIdRef.current = null;
+      childProcessRef.current = null;
     }
+  }, [status, projectPath, cliPath, handlePtyData, parseJsonLine]);
+
+  // Run Claude Code from user input
+  const runClaude = async () => {
+    await runClaudeWithPrompt(prompt);
   };
+
+  // Auto-run initial prompt
+  useEffect(() => {
+    if (initialPrompt && claudeAvailable && !hasAutoRunRef.current && status === "idle") {
+      hasAutoRunRef.current = true;
+      // Small delay to ensure component is fully mounted
+      setTimeout(() => {
+        if (initialPrompt.trim()) {
+          runClaudeWithPrompt(initialPrompt);
+          // Clear localStorage after using it
+          localStorage.removeItem('promptArchitect_claudeSessionPrompt');
+        }
+      }, 500);
+    }
+  }, [initialPrompt, claudeAvailable, status, runClaudeWithPrompt]);
 
   // Cancel running process
   const cancelRun = async () => {
-    if (ptyIdRef.current) {
+    if (childProcessRef.current) {
       try {
-        console.log("[Claude Run] Cancelling PTY:", ptyIdRef.current);
-        await invoke("close_pty", { id: ptyIdRef.current });
-        ptyIdRef.current = null;
+        console.log("[Claude Run] Killing process:", childProcessRef.current.pid);
+        await childProcessRef.current.kill();
+        childProcessRef.current = null;
         setStatus("idle");
       } catch (e) {
-        console.error("Failed to cancel PTY:", e);
+        console.error("Failed to cancel process:", e);
       }
     }
-  };
-
-  // Clear session
-  const clearSession = () => {
-    setMessages([]);
-    setStatus("idle");
-    setError(null);
   };
 
   // Handle key press
@@ -345,17 +360,6 @@ export const ClaudeSessionPanel: React.FC<ClaudeSessionPanelProps> = ({
         </div>
         <div className="flex items-center gap-2">
           {renderStatusBadge()}
-          {messages.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={clearSession}
-              className="h-7 text-xs"
-            >
-              <RotateCcw className="h-3 w-3 mr-1" />
-              Clear
-            </Button>
-          )}
         </div>
       </div>
 

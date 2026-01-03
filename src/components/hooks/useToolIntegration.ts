@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { ClaudeSettings, CodexSettings, PromptTemplate, SavedPrompt } from '../../types';
+import { ClaudeSettings, CodexSettings, PromptTemplate, SavedPrompt, WorktreeSettings } from '../../types';
 import { DEFAULT_CODEX_SETTINGS } from '../../codexSettings';
 import { DEFAULT_CLAUDE_SETTINGS } from '../../claudeSettings';
+import { DEFAULT_WORKTREE_SETTINGS, generateWorktreeName } from '../../worktreeSettings';
 import { resolvePromptRefs } from '../../utils';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -12,11 +13,13 @@ interface UseToolIntegrationProps {
   value: string;
   templates: PromptTemplate[];
   savedPrompts: SavedPrompt[];
-  onRunInTerminal?: (title?: string) => string | null;
+  onRunInTerminal?: (title?: string, type?: 'terminal' | 'claude') => string | null;
+  onSaveSessionPath?: (tabId: string, path: string) => void;
   promptTitle?: string;
   terminalTabId?: string | null;
   codexSettings?: CodexSettings;
   claudeSettings?: ClaudeSettings;
+  worktreeSettings?: WorktreeSettings;
 }
 
 export const useToolIntegration = ({
@@ -24,19 +27,23 @@ export const useToolIntegration = ({
   templates,
   savedPrompts,
   onRunInTerminal,
+  onSaveSessionPath,
   promptTitle,
   terminalTabId,
   codexSettings,
   claudeSettings,
+  worktreeSettings,
 }: UseToolIntegrationProps) => {
   const [showRunDropdown, setShowRunDropdown] = useState(false);
   const [showDirectoryModal, setShowDirectoryModal] = useState(false);
-  const [selectedTool, setSelectedTool] = useState<'codex' | 'claude' | null>(null);
+  const [selectedTool, setSelectedTool] = useState<'codex' | 'claude' | 'claude-ui' | null>(null);
   const [selectedDirectory, setSelectedDirectory] = useState<string>('');
+  const [createWorktree, setCreateWorktree] = useState(false);
   const runDropdownRef = useRef<HTMLDivElement>(null);
   const directoryInputRef = useRef<HTMLInputElement>(null);
   const effectiveCodexSettings = codexSettings ?? DEFAULT_CODEX_SETTINGS;
   const effectiveClaudeSettings = claudeSettings ?? DEFAULT_CLAUDE_SETTINGS;
+  const effectiveWorktreeSettings = worktreeSettings ?? DEFAULT_WORKTREE_SETTINGS;
 
   const shellEscape = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 
@@ -149,6 +156,31 @@ export const useToolIntegration = ({
     }
   }, []);
 
+  // Initialize createWorktree from settings when modal opens
+  useEffect(() => {
+    if (showDirectoryModal) {
+      setCreateWorktree(effectiveWorktreeSettings.enabled);
+    }
+  }, [showDirectoryModal, effectiveWorktreeSettings.enabled]);
+
+  // Build the git worktree creation command
+  const buildWorktreeCommand = (baseDir: string): { worktreePath: string; command: string } => {
+    const worktreeName = generateWorktreeName(effectiveWorktreeSettings.prefix);
+    // Create worktree as sibling directory to the base directory
+    const parentDir = baseDir.replace(/\/[^/]+\/?$/, '') || baseDir;
+    const worktreePath = `${parentDir}/${worktreeName}`;
+
+    // Get current branch and create a new branch for the worktree based on it
+    const command = [
+      `cd ${shellEscape(baseDir)}`,
+      `CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)`,
+      `git worktree add -b ${shellEscape(worktreeName)} ${shellEscape(worktreePath)} "$CURRENT_BRANCH"`,
+      `cd ${shellEscape(worktreePath)}`,
+    ].join(' && ');
+
+    return { worktreePath, command };
+  };
+
   useEffect(() => {
     if (selectedDirectory) {
       localStorage.setItem('promptArchitect_selectedDirectory', selectedDirectory);
@@ -168,12 +200,17 @@ export const useToolIntegration = ({
     }
   }, [showRunDropdown]);
 
-  const handleRunWithTool = (tool: 'codex' | 'claude') => {
+  const handleRunWithTool = (tool: 'codex' | 'claude' | 'claude-ui') => {
     const resolvedContent = resolvePromptRefs(value, templates, savedPrompts);
 
     if (!resolvedContent.trim()) {
       alert('Please write a prompt first.');
       return;
+    }
+
+    // Store the resolved prompt for all tools
+    if (tool === 'claude-ui') {
+      localStorage.setItem('promptArchitect_claudeSessionPrompt', resolvedContent);
     }
 
     setSelectedTool(tool);
@@ -256,6 +293,28 @@ export const useToolIntegration = ({
     }
 
     try {
+      // For Claude UI, create a Claude session tab
+      if (selectedTool === 'claude-ui') {
+        // Store the directory for the Claude session
+        localStorage.setItem('promptArchitect_claudeSessionDirectory', dir);
+        if (onRunInTerminal) {
+          onRunInTerminal(promptTitle || 'Claude Session', 'claude');
+        }
+        setShowDirectoryModal(false);
+        setSelectedTool(null);
+        return;
+      }
+
+      // Determine working directory - either worktree or original
+      let workingDir = dir;
+      let worktreePrefix = '';
+
+      if (createWorktree && dir) {
+        const { worktreePath, command: worktreeCommand } = buildWorktreeCommand(dir);
+        workingDir = worktreePath;
+        worktreePrefix = `${worktreeCommand} && `;
+      }
+
       const runTabId = onRunInTerminal?.(promptTitle) ?? terminalTabId ?? null;
       if (!runTabId) {
         alert('Select a terminal tab first.');
@@ -265,10 +324,21 @@ export const useToolIntegration = ({
       }
 
       await new Promise((resolve) => setTimeout(resolve, 60));
-      const command = selectedTool === 'claude'
-        ? buildClaudeCommand(resolvedContent, dir, true)
-        : buildCodexCommand(resolvedContent, dir, true);
-      enqueueTerminalWrite(runTabId, `${command}\n`);
+
+      if (workingDir) {
+        onSaveSessionPath?.(runTabId, workingDir);
+      }
+
+      const toolCommand = selectedTool === 'claude'
+        ? buildClaudeCommand(resolvedContent, workingDir, !createWorktree)
+        : buildCodexCommand(resolvedContent, workingDir, !createWorktree);
+
+      // If using worktree, prepend the worktree creation command
+      const finalCommand = createWorktree && dir
+        ? `${worktreePrefix}${toolCommand}`
+        : toolCommand;
+
+      enqueueTerminalWrite(runTabId, `${finalCommand}\n`);
     } catch (error) {
       console.error('Failed to run prompt in terminal:', error);
       alert('Failed to send prompt to the terminal.');
@@ -283,12 +353,14 @@ export const useToolIntegration = ({
     showDirectoryModal,
     selectedTool,
     selectedDirectory,
+    createWorktree,
     runDropdownRef,
     directoryInputRef,
     setShowRunDropdown,
     setShowDirectoryModal,
     setSelectedTool,
     setSelectedDirectory,
+    setCreateWorktree,
     handleRunWithTool,
     handleOpenInWeb,
     handleBrowseDirectory,
