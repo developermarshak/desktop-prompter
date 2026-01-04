@@ -1,0 +1,16 @@
+# Task group store + MCP command permissions.
+
+[[permission]]
+identifier = "allow-get-mcp-task-server-command"
+description = "Allow resolving the MCP task server command."
+commands.allow = ["get_mcp_task_server_command"]
+
+[[permission]]
+identifier = "allow-load-task-groups"
+description = "Allow loading task groups from the JSON store."
+commands.allow = ["load_task_groups"]
+
+[[permission]]
+identifier = "allow-save-task-groups"
+description = "Allow saving task groups to the JSON store."
+commands.allow = ["save_task_groups"]

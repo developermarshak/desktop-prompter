@@ -43,6 +43,11 @@ interface DiffStatsResponse {
   filesChanged: number;
 }
 
+interface McpServerCommandResponse {
+  command: string;
+  args: string[];
+}
+
 interface TaskGroupPanelProps {
   group: TaskGroup;
   templates: PromptTemplate[];
@@ -109,6 +114,19 @@ const buildWorktreeCommand = (
   return { worktreePath, command };
 };
 
+const mergeUnique = (base: string[], additions: string[]) => {
+  const seen = new Set(base);
+  const next = [...base];
+  for (const value of additions) {
+    if (seen.has(value)) {
+      continue;
+    }
+    seen.add(value);
+    next.push(value);
+  }
+  return next;
+};
+
 export const TaskGroupPanel = ({
   group,
   templates,
@@ -126,6 +144,14 @@ export const TaskGroupPanel = ({
   onSaveTerminalSessionPath,
   onOpenSession,
 }: TaskGroupPanelProps) => {
+  const codexMcpSessionSettings = useMemo(
+    () => ({
+      ...codexSettings,
+      runMode: "tui" as const,
+    }),
+    [codexSettings],
+  );
+
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [sectionModalTask, setSectionModalTask] = useState<Task | null>(null);
   const [sectionModalContent, setSectionModalContent] = useState<string>("");
@@ -195,6 +221,76 @@ export const TaskGroupPanel = ({
     },
     [group.prompt, loadSectionContent, savedPrompts, templates],
   );
+
+  const handleStartMcpSession = useCallback(async () => {
+    if (!isTauri()) {
+      alert("Terminal execution is only available in the Tauri app.");
+      return;
+    }
+    if (!group.projectPath.trim()) {
+      alert("Set a project path for the task group first.");
+      return;
+    }
+
+    let mcpCommand: McpServerCommandResponse;
+    try {
+      mcpCommand = await invoke<McpServerCommandResponse>(
+        "get_mcp_task_server_command",
+      );
+    } catch (error) {
+      console.error("Failed to resolve MCP command", error);
+      alert("Unable to locate the MCP task server.");
+      return;
+    }
+
+    const tabId = onRequestTerminal(`${group.name} tasks (MCP)`, "terminal");
+    if (!tabId) {
+      alert("Select a terminal tab first.");
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    onSaveTerminalSessionPath?.(tabId, group.projectPath.trim());
+
+    const prompt = [
+      "You are a task planning assistant for Desktop Prompter.",
+      `Task group: ${group.name}`,
+      "Use MCP tools to create, update, or archive tasks as requested.",
+      "Call task_group_list to find the group id, then use task_group_add_tasks or task_group_archive_tasks.",
+    ].join("\n");
+
+    const mcpOverrides = [
+      `mcp_servers.prompter.command=${JSON.stringify(mcpCommand.command)}`,
+      `mcp_servers.prompter.args=${JSON.stringify(mcpCommand.args ?? [])}`,
+    ];
+
+    const overridePrefixes = [
+      "mcp_servers.prompter.command=",
+      "mcp_servers.prompter.args=",
+    ];
+    const baseOverrides = codexMcpSessionSettings.configOverrides.filter(
+      (override) =>
+        !overridePrefixes.some((prefix) => override.startsWith(prefix)),
+    );
+    const codexSettingsWithCommand = {
+      ...codexMcpSessionSettings,
+      configOverrides: [...baseOverrides, ...mcpOverrides],
+    };
+
+    const command = buildCodexCommand(
+      prompt,
+      group.projectPath.trim(),
+      true,
+      codexSettingsWithCommand,
+    );
+    enqueueTerminalWrite(tabId, `${command}\n`);
+  }, [
+    codexMcpSessionSettings,
+    group.name,
+    group.projectPath,
+    onRequestTerminal,
+    onSaveTerminalSessionPath,
+  ]);
 
   const handleBrowseProjectPath = useCallback(async () => {
     if (!isTauri()) {
@@ -538,13 +634,23 @@ export const TaskGroupPanel = ({
 
       <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
         <div className="text-sm font-semibold text-zinc-200">Tasks</div>
-        <button
-          onClick={() => onCreateTask(group.id)}
-          className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          New
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleStartMcpSession}
+            className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white"
+            title="Start Codex with MCP for task planning"
+          >
+            <Play className="w-3.5 h-3.5" />
+            MCP session
+          </button>
+          <button
+            onClick={() => onCreateTask(group.id)}
+            className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New
+          </button>
+        </div>
       </div>
 
       <div className="px-4 py-2 border-b border-zinc-800 flex flex-wrap gap-2 items-center">

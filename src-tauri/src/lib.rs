@@ -71,6 +71,20 @@ struct McpServerTarget {
     use_node: bool,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct McpServerCommandResponse {
+    command: String,
+    args: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TaskGroupStoreResponse {
+    task_groups: Vec<serde_json::Value>,
+    exists: bool,
+}
+
 impl Drop for McpTaskServerState {
     fn drop(&mut self) {
         if let Ok(mut child_guard) = self.child.lock() {
@@ -154,6 +168,14 @@ fn resolve_section_path(root_path: Option<String>, file_path: String) -> Result<
     Ok(Path::new(&root).join(&file_path))
 }
 
+fn resolve_prompter_store_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let home_dir = app
+        .path()
+        .home_dir()
+        .map_err(|error| error.to_string())?;
+    Ok(home_dir.join(".prompter").join("task-groups.json"))
+}
+
 fn mcp_binary_name() -> &'static str {
     if cfg!(target_os = "windows") {
         "mcp-task-server.exe"
@@ -180,6 +202,20 @@ fn resolve_mcp_server_target(app: &tauri::AppHandle) -> Option<McpServerTarget> 
                 path: candidate,
                 use_node: true,
             });
+        }
+    }
+
+    if cfg!(debug_assertions) {
+        if let Ok(cwd) = std::env::current_dir() {
+            for base in cwd.ancestors().take(4) {
+                let candidate = base.join("scripts").join("mcp-task-server.cjs");
+                if candidate.exists() {
+                    return Some(McpServerTarget {
+                        path: candidate,
+                        use_node: true,
+                    });
+                }
+            }
         }
     }
 
@@ -242,13 +278,76 @@ fn start_mcp_task_server(
         cmd.current_dir(parent);
     }
 
-    if let Ok(app_data_dir) = app.path().app_data_dir() {
-        let tasks_path = app_data_dir.join("task-groups.json");
+    if let Ok(tasks_path) = resolve_prompter_store_path(app) {
         cmd.env("DESKTOP_PROMPTER_TASKS_PATH", tasks_path);
     }
 
     let child = cmd.spawn().map_err(|error| error.to_string())?;
     *child_guard = Some(child);
+    Ok(())
+}
+
+#[tauri::command]
+fn get_mcp_task_server_command(app: tauri::AppHandle) -> Result<McpServerCommandResponse, String> {
+    let target = resolve_mcp_server_target(&app)
+        .ok_or_else(|| "unable to locate mcp task server executable".to_string())?;
+    let node_binary =
+        std::env::var("DESKTOP_PROMPTER_MCP_NODE").unwrap_or_else(|_| "node".to_string());
+
+    if target.use_node {
+        return Ok(McpServerCommandResponse {
+            command: node_binary,
+            args: vec![target.path.to_string_lossy().to_string()],
+        });
+    }
+
+    Ok(McpServerCommandResponse {
+        command: target.path.to_string_lossy().to_string(),
+        args: Vec::new(),
+    })
+}
+
+#[tauri::command]
+fn load_task_groups(app: tauri::AppHandle) -> Result<TaskGroupStoreResponse, String> {
+    let store_path = resolve_prompter_store_path(&app)?;
+    let exists = store_path.exists();
+    if !exists {
+        return Ok(TaskGroupStoreResponse {
+            task_groups: Vec::new(),
+            exists: false,
+        });
+    }
+    let content = std::fs::read_to_string(&store_path).map_err(|error| error.to_string())?;
+    let parsed: serde_json::Value =
+        serde_json::from_str(&content).map_err(|error| error.to_string())?;
+    let task_groups = parsed
+        .get("taskGroups")
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
+    Ok(TaskGroupStoreResponse {
+        task_groups,
+        exists: true,
+    })
+}
+
+#[tauri::command]
+fn save_task_groups(
+    app: tauri::AppHandle,
+    task_groups: Vec<serde_json::Value>,
+) -> Result<(), String> {
+    let store_path = resolve_prompter_store_path(&app)?;
+    if let Some(parent) = store_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    let payload = serde_json::json!({
+        "taskGroups": task_groups,
+        "updatedAt": chrono::Utc::now().timestamp_millis(),
+    });
+    let tmp_path = store_path.with_extension("json.tmp");
+    std::fs::write(&tmp_path, serde_json::to_vec_pretty(&payload).map_err(|e| e.to_string())?)
+        .map_err(|error| error.to_string())?;
+    std::fs::rename(&tmp_path, &store_path).map_err(|error| error.to_string())?;
     Ok(())
 }
 
@@ -677,6 +776,9 @@ pub fn run() {
             write_pty,
             resize_pty,
             close_pty,
+            get_mcp_task_server_command,
+            load_task_groups,
+            save_task_groups,
             get_git_diff,
             get_git_diff_stats,
             get_git_diff_base,

@@ -769,6 +769,7 @@ dependencies = [
 name = "desktop-prompter"
 version = "0.1.9"
 dependencies = [
+ "chrono",
  "git2",
  "portable-pty",
  "serde",

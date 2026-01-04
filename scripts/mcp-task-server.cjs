@@ -2,16 +2,31 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 const { randomUUID } = require("node:crypto");
-const { Server } = require("@modelcontextprotocol/sdk/server");
-const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio");
+const { createRequire } = require("node:module");
+const process = require("node:process");
+
+const requireFromRoot = createRequire(path.join(__dirname, "..", "package.json"));
+const sdkPackagePath = requireFromRoot.resolve(
+  "@modelcontextprotocol/sdk/package.json",
+);
+const sdkPackageDir = path.dirname(sdkPackagePath);
+const sdkRoot =
+  path.basename(sdkPackageDir) === "cjs" &&
+  path.basename(path.dirname(sdkPackageDir)) === "dist"
+    ? path.resolve(sdkPackageDir, "..", "..")
+    : sdkPackageDir;
+const { Server } = require(path.join(sdkRoot, "dist", "cjs", "server", "index.js"));
+const {
+  StdioServerTransport,
+} = require(path.join(sdkRoot, "dist", "cjs", "server", "stdio.js"));
 const {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-} = require("@modelcontextprotocol/sdk/types");
+} = require(path.join(sdkRoot, "dist", "cjs", "types.js"));
 
 const DEFAULT_STORE_PATH = path.join(
   os.homedir(),
-  ".desktop-prompter",
+  ".prompter",
   "task-groups.json",
 );
 const STORE_PATH =
@@ -254,6 +269,7 @@ const handleArchiveTasks = async (args) => {
 };
 
 const run = async () => {
+  process.stdin.resume();
   const server = new Server(
     {
       name: "desktop-prompter-task-groups",
