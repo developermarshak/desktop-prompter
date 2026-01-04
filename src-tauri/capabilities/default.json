@@ -7,6 +7,7 @@
     "core:default",
     "opener:default",
     "dialog:allow-open",
+    "dialog:allow-message",
     "sql:default",
     "sql:allow-execute",
     "allow-spawn-pty",
@@ -14,6 +15,9 @@
     "allow-resize-pty",
     "allow-close-pty",
     "allow-get-git-diff",
+    "allow-get-mcp-task-server-command",
+    "allow-load-task-groups",
+    "allow-save-task-groups",
     "shell:allow-open",
     {
       "identifier": "shell:allow-execute",

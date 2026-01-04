@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { PromptEditor } from "./components/PromptEditor";
 import { ChatAssistant } from "./components/ChatAssistant";
@@ -40,6 +40,7 @@ const App: React.FC = () => {
   const chatManager = useChatManager();
   const settingsManager = useSettingsManager();
   const taskGroupsManager = useTaskGroupsManager();
+  const [migrationToast, setMigrationToast] = useState<string | null>(null);
 
   const { detachPanel, isDetached } = usePanelContext();
 
@@ -119,6 +120,18 @@ const App: React.FC = () => {
   );
 
   const activeTaskGroup = taskGroupsManager.activeTaskGroup;
+
+  useEffect(() => {
+    if (!taskGroupsManager.migrationNotice) {
+      return;
+    }
+    setMigrationToast(taskGroupsManager.migrationNotice);
+    taskGroupsManager.clearMigrationNotice();
+    const timer = window.setTimeout(() => {
+      setMigrationToast(null);
+    }, 6000);
+    return () => window.clearTimeout(timer);
+  }, [taskGroupsManager]);
 
   const openTaskSession = (tabId: string) => {
     const tab = terminalManager.terminalTabs.find((entry) => entry.id === tabId);
@@ -232,6 +245,11 @@ const App: React.FC = () => {
 
   return (
     <div className="h-screen bg-black overflow-hidden">
+      {migrationToast && (
+        <div className="fixed right-4 top-4 z-50 rounded-lg border border-emerald-500/40 bg-emerald-900/80 px-4 py-3 text-xs text-emerald-100 shadow-xl">
+          {migrationToast}
+        </div>
+      )}
       <Group
         orientation="horizontal"
         id="desktop-prompter-main-layout"

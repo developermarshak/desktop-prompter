@@ -43,6 +43,11 @@ interface DiffStatsResponse {
   filesChanged: number;
 }
 
+interface McpServerCommandResponse {
+  command: string;
+  args: string[];
+}
+
 interface TaskGroupPanelProps {
   group: TaskGroup;
   templates: PromptTemplate[];
@@ -109,6 +114,19 @@ const buildWorktreeCommand = (
   return { worktreePath, command };
 };
 
+const mergeUnique = (base: string[], additions: string[]) => {
+  const seen = new Set(base);
+  const next = [...base];
+  for (const value of additions) {
+    if (seen.has(value)) {
+      continue;
+    }
+    seen.add(value);
+    next.push(value);
+  }
+  return next;
+};
+
 export const TaskGroupPanel = ({
   group,
   templates,
@@ -126,6 +144,14 @@ export const TaskGroupPanel = ({
   onSaveTerminalSessionPath,
   onOpenSession,
 }: TaskGroupPanelProps) => {
+  const codexMcpSessionSettings = useMemo(
+    () => ({
+      ...codexSettings,
+      runMode: "tui" as const,
+    }),
+    [codexSettings],
+  );
+
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [sectionModalTask, setSectionModalTask] = useState<Task | null>(null);
   const [sectionModalContent, setSectionModalContent] = useState<string>("");
@@ -195,6 +221,76 @@ export const TaskGroupPanel = ({
     },
     [group.prompt, loadSectionContent, savedPrompts, templates],
   );
+
+  const handleStartMcpSession = useCallback(async () => {
+    if (!isTauri()) {
+      alert("Terminal execution is only available in the Tauri app.");
+      return;
+    }
+    if (!group.projectPath.trim()) {
+      alert("Set a project path for the task group first.");
+      return;
+    }
+
+    let mcpCommand: McpServerCommandResponse;
+    try {
+      mcpCommand = await invoke<McpServerCommandResponse>(
+        "get_mcp_task_server_command",
+      );
+    } catch (error) {
+      console.error("Failed to resolve MCP command", error);
+      alert("Unable to locate the MCP task server.");
+      return;
+    }
+
+    const tabId = onRequestTerminal(`${group.name} tasks (MCP)`, "terminal");
+    if (!tabId) {
+      alert("Select a terminal tab first.");
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    onSaveTerminalSessionPath?.(tabId, group.projectPath.trim());
+
+    const prompt = [
+      "You are a task planning assistant for Desktop Prompter.",
+      `Task group: ${group.name}`,
+      "Use MCP tools to create, update, or archive tasks as requested.",
+      "Call task_group_list to find the group id, then use task_group_add_tasks or task_group_archive_tasks.",
+    ].join("\n");
+
+    const mcpOverrides = [
+      `mcp_servers.prompter.command=${JSON.stringify(mcpCommand.command)}`,
+      `mcp_servers.prompter.args=${JSON.stringify(mcpCommand.args ?? [])}`,
+    ];
+
+    const overridePrefixes = [
+      "mcp_servers.prompter.command=",
+      "mcp_servers.prompter.args=",
+    ];
+    const baseOverrides = codexMcpSessionSettings.configOverrides.filter(
+      (override) =>
+        !overridePrefixes.some((prefix) => override.startsWith(prefix)),
+    );
+    const codexSettingsWithCommand = {
+      ...codexMcpSessionSettings,
+      configOverrides: [...baseOverrides, ...mcpOverrides],
+    };
+
+    const command = buildCodexCommand(
+      prompt,
+      group.projectPath.trim(),
+      true,
+      codexSettingsWithCommand,
+    );
+    enqueueTerminalWrite(tabId, `${command}\n`);
+  }, [
+    codexMcpSessionSettings,
+    group.name,
+    group.projectPath,
+    onRequestTerminal,
+    onSaveTerminalSessionPath,
+  ]);
 
   const handleBrowseProjectPath = useCallback(async () => {
     if (!isTauri()) {
@@ -542,11 +638,20 @@ export const TaskGroupPanel = ({
             Tip: use &#123;&#123;section&#125;&#125; in the prompt to inject task
             sections.
           </p>
-          </div>
         </div>
+      </div>
 
-        <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
-          <div className="text-sm font-semibold text-zinc-200">Tasks</div>
+      <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
+        <div className="text-sm font-semibold text-zinc-200">Tasks</div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleStartMcpSession}
+            className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white"
+            title="Start Codex with MCP for task planning"
+          >
+            <Play className="w-3.5 h-3.5" />
+            MCP session
+          </button>
           <button
             onClick={() => onCreateTask(group.id)}
             className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white"
@@ -555,59 +660,60 @@ export const TaskGroupPanel = ({
             New
           </button>
         </div>
+      </div>
 
-        <div className="px-4 py-2 border-b border-zinc-800 flex flex-wrap gap-2 items-center">
-          <button
-            onClick={() =>
-              onSetTasksSelected(
-                group.id,
-                group.tasks.map((task) => task.id),
-                !allSelected,
-              )
-            }
-            className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white"
-          >
-            {allSelected ? (
-              <CheckSquare className="w-3.5 h-3.5" />
-            ) : (
-              <Square className="w-3.5 h-3.5" />
-            )}
-            {allSelected ? "Deselect all" : "Select all"}
-          </button>
-          <div className="h-4 w-px bg-zinc-800" />
-          <button
-            onClick={handleRunSelected}
-            disabled={selectedTaskIds.length === 0}
-            className="flex items-center gap-1 text-xs text-emerald-300 hover:text-white disabled:text-zinc-600"
-          >
-            <Play className="w-3.5 h-3.5" />
-            Run selected
-          </button>
-          <button
-            onClick={handleArchiveSelected}
-            disabled={selectedTaskIds.length === 0}
-            className="flex items-center gap-1 text-xs text-amber-300 hover:text-white disabled:text-zinc-600"
-          >
-            <Archive className="w-3.5 h-3.5" />
-            Archive
-          </button>
-          <button
-            onClick={handleDeleteSelected}
-            disabled={selectedTaskIds.length === 0}
-            className="flex items-center gap-1 text-xs text-rose-300 hover:text-white disabled:text-zinc-600"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            Delete
-          </button>
-          <div className="h-4 w-px bg-zinc-800" />
-          <button
-            onClick={refreshAllDiffStats}
-            className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            Refresh diffs
-          </button>
-        </div>
+      <div className="px-4 py-2 border-b border-zinc-800 flex flex-wrap gap-2 items-center">
+        <button
+          onClick={() =>
+            onSetTasksSelected(
+              group.id,
+              group.tasks.map((task) => task.id),
+              !allSelected,
+            )
+          }
+          className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white"
+        >
+          {allSelected ? (
+            <CheckSquare className="w-3.5 h-3.5" />
+          ) : (
+            <Square className="w-3.5 h-3.5" />
+          )}
+          {allSelected ? "Deselect all" : "Select all"}
+        </button>
+        <div className="h-4 w-px bg-zinc-800" />
+        <button
+          onClick={handleRunSelected}
+          disabled={selectedTaskIds.length === 0}
+          className="flex items-center gap-1 text-xs text-emerald-300 hover:text-white disabled:text-zinc-600"
+        >
+          <Play className="w-3.5 h-3.5" />
+          Run selected
+        </button>
+        <button
+          onClick={handleArchiveSelected}
+          disabled={selectedTaskIds.length === 0}
+          className="flex items-center gap-1 text-xs text-amber-300 hover:text-white disabled:text-zinc-600"
+        >
+          <Archive className="w-3.5 h-3.5" />
+          Archive
+        </button>
+        <button
+          onClick={handleDeleteSelected}
+          disabled={selectedTaskIds.length === 0}
+          className="flex items-center gap-1 text-xs text-rose-300 hover:text-white disabled:text-zinc-600"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+          Delete
+        </button>
+        <div className="h-4 w-px bg-zinc-800" />
+        <button
+          onClick={refreshAllDiffStats}
+          className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          Refresh diffs
+        </button>
+      </div>
 
         <div className="pb-6">
           {group.tasks.length === 0 ? (

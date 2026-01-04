@@ -64,6 +64,11 @@ npm run dev
 npm run tauri build
 ```
 
+### MCP Task Server
+
+- Dev server: `npm run mcp:task-server`
+- Bundled binary for production: `npm run mcp:task-server:bundle` (runs automatically before `tauri build`)
+
 ### Project Structure
 
 ```

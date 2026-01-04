@@ -5,6 +5,7 @@ use std::{
     collections::HashMap,
     io::{Read, Write},
     path::{Path, PathBuf},
+    process::{Child, Command, Stdio},
     sync::Mutex,
 };
 use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -58,6 +59,40 @@ struct PtySession {
 #[derive(Default)]
 struct PtyState {
     sessions: Mutex<HashMap<String, PtySession>>,
+}
+
+#[derive(Default)]
+struct McpTaskServerState {
+    child: Mutex<Option<Child>>,
+}
+
+struct McpServerTarget {
+    path: PathBuf,
+    use_node: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct McpServerCommandResponse {
+    command: String,
+    args: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TaskGroupStoreResponse {
+    task_groups: Vec<serde_json::Value>,
+    exists: bool,
+}
+
+impl Drop for McpTaskServerState {
+    fn drop(&mut self) {
+        if let Ok(mut child_guard) = self.child.lock() {
+            if let Some(mut child) = child_guard.take() {
+                let _ = child.kill();
+            }
+        }
+    }
 }
 
 fn shell_command() -> CommandBuilder {
@@ -131,6 +166,189 @@ fn resolve_section_path(root_path: Option<String>, file_path: String) -> Result<
         return Err("root path is required for relative file paths".to_string());
     };
     Ok(Path::new(&root).join(&file_path))
+}
+
+fn resolve_prompter_store_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let home_dir = app
+        .path()
+        .home_dir()
+        .map_err(|error| error.to_string())?;
+    Ok(home_dir.join(".prompter").join("task-groups.json"))
+}
+
+fn mcp_binary_name() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "mcp-task-server.exe"
+    } else {
+        "mcp-task-server"
+    }
+}
+
+fn resolve_mcp_server_target(app: &tauri::AppHandle) -> Option<McpServerTarget> {
+    if let Ok(explicit) = std::env::var("DESKTOP_PROMPTER_MCP_BINARY") {
+        let candidate = PathBuf::from(explicit);
+        if candidate.exists() {
+            return Some(McpServerTarget {
+                path: candidate,
+                use_node: false,
+            });
+        }
+    }
+
+    if let Ok(explicit) = std::env::var("DESKTOP_PROMPTER_MCP_SCRIPT") {
+        let candidate = PathBuf::from(explicit);
+        if candidate.exists() {
+            return Some(McpServerTarget {
+                path: candidate,
+                use_node: true,
+            });
+        }
+    }
+
+    if cfg!(debug_assertions) {
+        if let Ok(cwd) = std::env::current_dir() {
+            for base in cwd.ancestors().take(4) {
+                let candidate = base.join("scripts").join("mcp-task-server.cjs");
+                if candidate.exists() {
+                    return Some(McpServerTarget {
+                        path: candidate,
+                        use_node: true,
+                    });
+                }
+            }
+        }
+    }
+
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        let candidate = resource_dir.join(mcp_binary_name());
+        if candidate.exists() {
+            return Some(McpServerTarget {
+                path: candidate,
+                use_node: false,
+            });
+        }
+    }
+
+    if let Ok(cwd) = std::env::current_dir() {
+        for base in cwd.ancestors().take(4) {
+            let candidate = base.join("scripts").join("mcp-task-server.cjs");
+            if candidate.exists() {
+                return Some(McpServerTarget {
+                    path: candidate,
+                    use_node: true,
+                });
+            }
+        }
+    }
+
+    None
+}
+
+fn start_mcp_task_server(
+    app: &tauri::AppHandle,
+    state: &State<McpTaskServerState>,
+) -> Result<(), String> {
+    let mut child_guard = state
+        .child
+        .lock()
+        .map_err(|_| "mcp task server state poisoned".to_string())?;
+    if child_guard.is_some() {
+        return Ok(());
+    }
+
+    let target = resolve_mcp_server_target(app)
+        .ok_or_else(|| "unable to locate mcp task server executable".to_string())?;
+    let node_binary =
+        std::env::var("DESKTOP_PROMPTER_MCP_NODE").unwrap_or_else(|_| "node".to_string());
+
+    let mut cmd = if target.use_node {
+        let mut cmd = Command::new(node_binary);
+        cmd.arg(&target.path);
+        cmd
+    } else {
+        Command::new(&target.path)
+    };
+
+    cmd
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+
+    if let Some(parent) = target.path.parent() {
+        cmd.current_dir(parent);
+    }
+
+    if let Ok(tasks_path) = resolve_prompter_store_path(app) {
+        cmd.env("DESKTOP_PROMPTER_TASKS_PATH", tasks_path);
+    }
+
+    let child = cmd.spawn().map_err(|error| error.to_string())?;
+    *child_guard = Some(child);
+    Ok(())
+}
+
+#[tauri::command]
+fn get_mcp_task_server_command(app: tauri::AppHandle) -> Result<McpServerCommandResponse, String> {
+    let target = resolve_mcp_server_target(&app)
+        .ok_or_else(|| "unable to locate mcp task server executable".to_string())?;
+    let node_binary =
+        std::env::var("DESKTOP_PROMPTER_MCP_NODE").unwrap_or_else(|_| "node".to_string());
+
+    if target.use_node {
+        return Ok(McpServerCommandResponse {
+            command: node_binary,
+            args: vec![target.path.to_string_lossy().to_string()],
+        });
+    }
+
+    Ok(McpServerCommandResponse {
+        command: target.path.to_string_lossy().to_string(),
+        args: Vec::new(),
+    })
+}
+
+#[tauri::command]
+fn load_task_groups(app: tauri::AppHandle) -> Result<TaskGroupStoreResponse, String> {
+    let store_path = resolve_prompter_store_path(&app)?;
+    let exists = store_path.exists();
+    if !exists {
+        return Ok(TaskGroupStoreResponse {
+            task_groups: Vec::new(),
+            exists: false,
+        });
+    }
+    let content = std::fs::read_to_string(&store_path).map_err(|error| error.to_string())?;
+    let parsed: serde_json::Value =
+        serde_json::from_str(&content).map_err(|error| error.to_string())?;
+    let task_groups = parsed
+        .get("taskGroups")
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
+    Ok(TaskGroupStoreResponse {
+        task_groups,
+        exists: true,
+    })
+}
+
+#[tauri::command]
+fn save_task_groups(
+    app: tauri::AppHandle,
+    task_groups: Vec<serde_json::Value>,
+) -> Result<(), String> {
+    let store_path = resolve_prompter_store_path(&app)?;
+    if let Some(parent) = store_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    let payload = serde_json::json!({
+        "taskGroups": task_groups,
+        "updatedAt": chrono::Utc::now().timestamp_millis(),
+    });
+    let tmp_path = store_path.with_extension("json.tmp");
+    std::fs::write(&tmp_path, serde_json::to_vec_pretty(&payload).map_err(|e| e.to_string())?)
+        .map_err(|error| error.to_string())?;
+    std::fs::rename(&tmp_path, &store_path).map_err(|error| error.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -537,11 +755,20 @@ async fn close_panel_window(app: tauri::AppHandle, panel_id: String) -> Result<(
 pub fn run() {
     tauri::Builder::default()
         .manage(PtyState::default())
+        .manage(McpTaskServerState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
+        .setup(|app| {
+            let handle = app.handle();
+            let state = app.state::<McpTaskServerState>();
+            if let Err(error) = start_mcp_task_server(&handle, &state) {
+                eprintln!("Failed to start MCP task server: {error}");
+            }
+            Ok(())
+        })
         // Updater temporarily disabled - TODO: fix signature generation
         // .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
@@ -549,6 +776,9 @@ pub fn run() {
             write_pty,
             resize_pty,
             close_pty,
+            get_mcp_task_server_command,
+            load_task_groups,
+            save_task_groups,
             get_git_diff,
             get_git_diff_stats,
             get_git_diff_base,

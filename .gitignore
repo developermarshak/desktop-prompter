@@ -13,6 +13,7 @@ dist-ssr
 **/target
 legacy/
 *.local
+src-tauri/resources/mcp-task-server*
 
 # Editor directories and files
 .vscode/*
