@@ -127,6 +127,46 @@ const App: React.FC = () => {
     }
   };
 
+  const promptEditorContent = (
+    <PromptEditor
+      value={activeTaskGroup ? activeTaskGroup.prompt : promptsManager.promptContent}
+      activeTitle={
+        activeTaskGroup ? activeTaskGroup.name : promptsManager.currentDisplayTitle
+      }
+      saveStatus={activeTaskGroup ? "saved" : promptsManager.saveStatus}
+      onChange={(value) => {
+        if (activeTaskGroup) {
+          taskGroupsManager.updateTaskGroup(activeTaskGroup.id, { prompt: value });
+        } else {
+          promptsManager.setPromptContent(value);
+        }
+      }}
+      onTitleChange={(title) => {
+        if (activeTaskGroup) {
+          taskGroupsManager.renameTaskGroup(activeTaskGroup.id, title);
+        } else {
+          promptsManager.handleTitleChange(title);
+        }
+      }}
+      templates={promptsManager.allTemplates}
+      savedPrompts={promptsManager.savedPrompts}
+      isChatOpen={chatManager.chatOpen}
+      onRequestTerminal={terminalManager.createTerminalTab}
+      promptTitle={
+        activeTaskGroup ? activeTaskGroup.name : promptsManager.currentDisplayTitle
+      }
+      activeTerminalTabId={terminalManager.activeTerminalTabId}
+      onSaveTerminalSessionPath={terminalManager.setTerminalSessionPath}
+      codexSettings={settingsManager.codexSettings}
+      claudeSettings={settingsManager.claudeSettings}
+      worktreeSettings={settingsManager.worktreeSettings}
+      isTemplate={activeTaskGroup ? false : promptsManager.isTemplate}
+      onToggleTemplate={activeTaskGroup ? () => {} : promptsManager.handleToggleTemplate}
+      showTemplateToggle={!activeTaskGroup}
+      showPromptActions={!activeTaskGroup}
+    />
+  );
+
   const mainContent =
     activeView === "settings" ? (
       <CodexSettingsPanel
@@ -139,64 +179,26 @@ const App: React.FC = () => {
         onClose={() => setActiveView("editor")}
         onReset={settingsManager.resetAllSettings}
       />
-    ) : (
-      <PromptEditor
-        value={activeTaskGroup ? activeTaskGroup.prompt : promptsManager.promptContent}
-        activeTitle={
-          activeTaskGroup ? activeTaskGroup.name : promptsManager.currentDisplayTitle
-        }
-        saveStatus={activeTaskGroup ? "saved" : promptsManager.saveStatus}
-        onChange={(value) => {
-          if (activeTaskGroup) {
-            taskGroupsManager.updateTaskGroup(activeTaskGroup.id, { prompt: value });
-          } else {
-            promptsManager.setPromptContent(value);
-          }
-        }}
-        onTitleChange={(title) => {
-          if (activeTaskGroup) {
-            taskGroupsManager.renameTaskGroup(activeTaskGroup.id, title);
-          } else {
-            promptsManager.handleTitleChange(title);
-          }
-        }}
+    ) : activeTaskGroup ? (
+      <TaskGroupPanel
+        group={activeTaskGroup}
         templates={promptsManager.allTemplates}
         savedPrompts={promptsManager.savedPrompts}
-        isChatOpen={chatManager.chatOpen}
-        onRequestTerminal={terminalManager.createTerminalTab}
-        promptTitle={
-          activeTaskGroup ? activeTaskGroup.name : promptsManager.currentDisplayTitle
-        }
-        activeTerminalTabId={terminalManager.activeTerminalTabId}
-        onSaveTerminalSessionPath={terminalManager.setTerminalSessionPath}
         codexSettings={settingsManager.codexSettings}
         claudeSettings={settingsManager.claudeSettings}
-        worktreeSettings={settingsManager.worktreeSettings}
-        isTemplate={activeTaskGroup ? false : promptsManager.isTemplate}
-        onToggleTemplate={activeTaskGroup ? () => {} : promptsManager.handleToggleTemplate}
-        showTemplateToggle={!activeTaskGroup}
-        taskPanel={
-          activeTaskGroup ? (
-            <TaskGroupPanel
-              group={activeTaskGroup}
-              templates={promptsManager.allTemplates}
-              savedPrompts={promptsManager.savedPrompts}
-              codexSettings={settingsManager.codexSettings}
-              claudeSettings={settingsManager.claudeSettings}
-              onUpdateGroup={taskGroupsManager.updateTaskGroup}
-              onCreateTask={taskGroupsManager.createTask}
-              onUpdateTask={taskGroupsManager.updateTask}
-              onDeleteTasks={taskGroupsManager.deleteTasks}
-              onSetTasksStatus={taskGroupsManager.setTasksStatus}
-              onSetTasksSelected={taskGroupsManager.setTasksSelected}
-              onClearSelection={taskGroupsManager.clearTaskSelection}
-              onRequestTerminal={terminalManager.createTerminalTab}
-              onSaveTerminalSessionPath={terminalManager.setTerminalSessionPath}
-              onOpenSession={openTaskSession}
-            />
-          ) : null
-        }
+        onUpdateGroup={taskGroupsManager.updateTaskGroup}
+        onCreateTask={taskGroupsManager.createTask}
+        onUpdateTask={taskGroupsManager.updateTask}
+        onDeleteTasks={taskGroupsManager.deleteTasks}
+        onSetTasksStatus={taskGroupsManager.setTasksStatus}
+        onSetTasksSelected={taskGroupsManager.setTasksSelected}
+        onClearSelection={taskGroupsManager.clearTaskSelection}
+        onRequestTerminal={terminalManager.createTerminalTab}
+        onSaveTerminalSessionPath={terminalManager.setTerminalSessionPath}
+        onOpenSession={openTaskSession}
       />
+    ) : (
+      promptEditorContent
     );
 
   const terminalContent = (
@@ -347,7 +349,7 @@ const App: React.FC = () => {
         </ResizablePanel>
 
         {/* Chat Assistant Panel (Right Column) */}
-        {(diffOpen || chatManager.chatOpen) && (
+        {(diffOpen || chatManager.chatOpen || activeTaskGroup) && (
           <>
             <Separator className="w-1 bg-zinc-800 hover:bg-indigo-500 transition-colors cursor-col-resize" />
             <ResizablePanel
@@ -363,14 +365,16 @@ const App: React.FC = () => {
                     sessionPath={activeTerminalSessionPath}
                     onClose={() => setDiffOpen(false)}
                   />
-                ) : (
+                ) : chatManager.chatOpen ? (
                   <ChatAssistant
                     messages={chatManager.messages}
                     isLoading={chatManager.chatLoading}
                     onSendMessage={chatManager.handleSendMessage}
                     onClose={() => chatManager.setChatOpen(false)}
                   />
-                )}
+                ) : activeTaskGroup && activeView !== "settings" ? (
+                  <div className="h-full bg-zinc-950">{promptEditorContent}</div>
+                ) : null}
               </div>
             </ResizablePanel>
           </>

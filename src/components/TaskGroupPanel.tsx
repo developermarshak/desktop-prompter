@@ -465,12 +465,21 @@ export const TaskGroupPanel = ({
   }, [group.id, onDeleteTasks, selectedTaskIds]);
 
   return (
-    <div className="h-full flex flex-col bg-zinc-950/40">
-      <div className="p-4 border-b border-zinc-800 space-y-3">
-        <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">
-          Task Group Settings
+    <div className="flex flex-col h-full bg-zinc-900">
+      <div className="h-16 flex items-center justify-between px-4 border-b border-zinc-800 bg-zinc-900 shrink-0">
+        <div className="flex items-center gap-2 text-zinc-200 font-semibold">
+          <span>Task Group</span>
         </div>
-        <div className="grid grid-cols-1 gap-3">
+        <span className="text-[10px] text-zinc-500 max-w-[180px] truncate">
+          {group.name}
+        </span>
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar bg-zinc-950/40">
+        <div className="p-4 border-b border-zinc-800 space-y-3">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">
+            Task Group Settings
+          </div>
+          <div className="grid grid-cols-1 gap-3">
           <div className="flex items-center gap-2">
             <label className="text-xs text-zinc-400 w-24">Runner</label>
             <select
@@ -533,294 +542,295 @@ export const TaskGroupPanel = ({
             Tip: use &#123;&#123;section&#125;&#125; in the prompt to inject task
             sections.
           </p>
-        </div>
-      </div>
-
-      <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
-        <div className="text-sm font-semibold text-zinc-200">Tasks</div>
-        <button
-          onClick={() => onCreateTask(group.id)}
-          className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          New
-        </button>
-      </div>
-
-      <div className="px-4 py-2 border-b border-zinc-800 flex flex-wrap gap-2 items-center">
-        <button
-          onClick={() =>
-            onSetTasksSelected(
-              group.id,
-              group.tasks.map((task) => task.id),
-              !allSelected,
-            )
-          }
-          className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white"
-        >
-          {allSelected ? (
-            <CheckSquare className="w-3.5 h-3.5" />
-          ) : (
-            <Square className="w-3.5 h-3.5" />
-          )}
-          {allSelected ? "Deselect all" : "Select all"}
-        </button>
-        <div className="h-4 w-px bg-zinc-800" />
-        <button
-          onClick={handleRunSelected}
-          disabled={selectedTaskIds.length === 0}
-          className="flex items-center gap-1 text-xs text-emerald-300 hover:text-white disabled:text-zinc-600"
-        >
-          <Play className="w-3.5 h-3.5" />
-          Run selected
-        </button>
-        <button
-          onClick={handleArchiveSelected}
-          disabled={selectedTaskIds.length === 0}
-          className="flex items-center gap-1 text-xs text-amber-300 hover:text-white disabled:text-zinc-600"
-        >
-          <Archive className="w-3.5 h-3.5" />
-          Archive
-        </button>
-        <button
-          onClick={handleDeleteSelected}
-          disabled={selectedTaskIds.length === 0}
-          className="flex items-center gap-1 text-xs text-rose-300 hover:text-white disabled:text-zinc-600"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-          Delete
-        </button>
-        <div className="h-4 w-px bg-zinc-800" />
-        <button
-          onClick={refreshAllDiffStats}
-          className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          Refresh diffs
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
-        {group.tasks.length === 0 ? (
-          <div className="p-6 text-sm text-zinc-600 italic">
-            No tasks yet. Add one to get started.
           </div>
-        ) : (
-          group.tasks.map((task) => {
-            const isExpanded = expandedTaskId === task.id;
-            const diffStats = task.diffStats;
-            const diffLabel = diffStats
-              ? `+${diffStats.added} -${diffStats.removed}`
-              : "--";
-            const hasDiff =
-              diffStats && (diffStats.added > 0 || diffStats.removed > 0);
-            return (
-              <div
-                key={task.id}
-                className="border-b border-zinc-900/70 px-4 py-3"
-              >
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={task.selected}
-                    onChange={(event) =>
-                      onSetTasksSelected(group.id, [task.id], event.target.checked)
-                    }
-                    className="w-4 h-4 rounded border-zinc-600 bg-zinc-950 text-indigo-500 focus:ring-indigo-500/50 focus:ring-offset-0"
-                  />
-                  <button
-                    onClick={() =>
-                      setExpandedTaskId(isExpanded ? null : task.id)
-                    }
-                    className="text-zinc-500 hover:text-white"
-                    title={isExpanded ? "Collapse" : "Expand"}
-                  >
-                    {isExpanded ? (
-                      <ChevronUp className="w-4 h-4" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4" />
+        </div>
+
+        <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
+          <div className="text-sm font-semibold text-zinc-200">Tasks</div>
+          <button
+            onClick={() => onCreateTask(group.id)}
+            className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New
+          </button>
+        </div>
+
+        <div className="px-4 py-2 border-b border-zinc-800 flex flex-wrap gap-2 items-center">
+          <button
+            onClick={() =>
+              onSetTasksSelected(
+                group.id,
+                group.tasks.map((task) => task.id),
+                !allSelected,
+              )
+            }
+            className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white"
+          >
+            {allSelected ? (
+              <CheckSquare className="w-3.5 h-3.5" />
+            ) : (
+              <Square className="w-3.5 h-3.5" />
+            )}
+            {allSelected ? "Deselect all" : "Select all"}
+          </button>
+          <div className="h-4 w-px bg-zinc-800" />
+          <button
+            onClick={handleRunSelected}
+            disabled={selectedTaskIds.length === 0}
+            className="flex items-center gap-1 text-xs text-emerald-300 hover:text-white disabled:text-zinc-600"
+          >
+            <Play className="w-3.5 h-3.5" />
+            Run selected
+          </button>
+          <button
+            onClick={handleArchiveSelected}
+            disabled={selectedTaskIds.length === 0}
+            className="flex items-center gap-1 text-xs text-amber-300 hover:text-white disabled:text-zinc-600"
+          >
+            <Archive className="w-3.5 h-3.5" />
+            Archive
+          </button>
+          <button
+            onClick={handleDeleteSelected}
+            disabled={selectedTaskIds.length === 0}
+            className="flex items-center gap-1 text-xs text-rose-300 hover:text-white disabled:text-zinc-600"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete
+          </button>
+          <div className="h-4 w-px bg-zinc-800" />
+          <button
+            onClick={refreshAllDiffStats}
+            className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Refresh diffs
+          </button>
+        </div>
+
+        <div className="pb-6">
+          {group.tasks.length === 0 ? (
+            <div className="p-6 text-sm text-zinc-600 italic">
+              No tasks yet. Add one to get started.
+            </div>
+          ) : (
+            group.tasks.map((task) => {
+              const isExpanded = expandedTaskId === task.id;
+              const diffStats = task.diffStats;
+              const diffLabel = diffStats
+                ? `+${diffStats.added} -${diffStats.removed}`
+                : "--";
+              const hasDiff =
+                diffStats && (diffStats.added > 0 || diffStats.removed > 0);
+              return (
+                <div
+                  key={task.id}
+                  className="border-b border-zinc-900/70 px-4 py-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={task.selected}
+                      onChange={(event) =>
+                        onSetTasksSelected(group.id, [task.id], event.target.checked)
+                      }
+                      className="w-4 h-4 rounded border-zinc-600 bg-zinc-950 text-indigo-500 focus:ring-indigo-500/50 focus:ring-offset-0"
+                    />
+                    <button
+                      onClick={() =>
+                        setExpandedTaskId(isExpanded ? null : task.id)
+                      }
+                      className="text-zinc-500 hover:text-white"
+                      title={isExpanded ? "Collapse" : "Expand"}
+                    >
+                      {isExpanded ? (
+                        <ChevronUp className="w-4 h-4" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4" />
+                      )}
+                    </button>
+                    <input
+                      type="text"
+                      value={task.name}
+                      onChange={(event) =>
+                        onUpdateTask(group.id, task.id, { name: event.target.value })
+                      }
+                      className="flex-1 bg-transparent text-sm text-zinc-100 focus:outline-none"
+                    />
+                    <select
+                      value={task.status}
+                      onChange={(event) =>
+                        onUpdateTask(group.id, task.id, {
+                          status: event.target.value as TaskStatus,
+                        })
+                      }
+                      className="bg-zinc-950 border border-zinc-700 rounded-md px-2 py-1 text-[10px] text-zinc-300 uppercase tracking-wide"
+                    >
+                      {statusOrder.map((status) => (
+                        <option key={status} value={status}>
+                          {statusLabels[status]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                    <span>{formatSectionLabel(task)}</span>
+                    <span className="text-zinc-600">|</span>
+                    <span className="font-mono">{diffLabel}</span>
+                    {task.gitBranch && (
+                      <>
+                        <span className="text-zinc-600">|</span>
+                        <span className="inline-flex items-center gap-1">
+                          <GitBranch className="w-3 h-3" />
+                          {task.gitBranch}
+                        </span>
+                      </>
                     )}
-                  </button>
-                  <input
-                    type="text"
-                    value={task.name}
-                    onChange={(event) =>
-                      onUpdateTask(group.id, task.id, { name: event.target.value })
-                    }
-                    className="flex-1 bg-transparent text-sm text-zinc-100 focus:outline-none"
-                  />
-                  <select
-                    value={task.status}
-                    onChange={(event) =>
-                      onUpdateTask(group.id, task.id, {
-                        status: event.target.value as TaskStatus,
-                      })
-                    }
-                    className="bg-zinc-950 border border-zinc-700 rounded-md px-2 py-1 text-[10px] text-zinc-300 uppercase tracking-wide"
-                  >
-                    {statusOrder.map((status) => (
-                      <option key={status} value={status}>
-                        {statusLabels[status]}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                  </div>
 
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-                  <span>{formatSectionLabel(task)}</span>
-                  <span className="text-zinc-600">|</span>
-                  <span className="font-mono">{diffLabel}</span>
-                  {task.gitBranch && (
-                    <>
-                      <span className="text-zinc-600">|</span>
-                      <span className="inline-flex items-center gap-1">
-                        <GitBranch className="w-3 h-3" />
-                        {task.gitBranch}
-                      </span>
-                    </>
-                  )}
-                </div>
-
-                {isExpanded && (
-                  <div className="mt-3 grid grid-cols-1 gap-3 text-xs text-zinc-400">
-                    <div className="grid grid-cols-1 gap-2">
-                      <label className="text-[10px] uppercase text-zinc-500">
-                        Section
-                      </label>
+                  {isExpanded && (
+                    <div className="mt-3 grid grid-cols-1 gap-3 text-xs text-zinc-400">
                       <div className="grid grid-cols-1 gap-2">
-                        <input
-                          type="text"
-                          value={task.section?.filePath ?? ""}
-                          onChange={(event) =>
-                            onUpdateTask(group.id, task.id, {
-                              section: {
-                                filePath: event.target.value,
-                                lineStart: task.section?.lineStart ?? 1,
-                                lineEnd: task.section?.lineEnd ?? 1,
-                              },
-                            })
-                          }
-                          placeholder="relative/path/to/file.ts"
-                          className="bg-zinc-950 border border-zinc-700 rounded-md px-2 py-1 text-xs text-zinc-200"
-                        />
-                        <div className="grid grid-cols-2 gap-2">
+                        <label className="text-[10px] uppercase text-zinc-500">
+                          Section
+                        </label>
+                        <div className="grid grid-cols-1 gap-2">
                           <input
-                            type="number"
-                            min={1}
-                            value={task.section?.lineStart ?? 1}
+                            type="text"
+                            value={task.section?.filePath ?? ""}
                             onChange={(event) =>
                               onUpdateTask(group.id, task.id, {
                                 section: {
-                                  filePath: task.section?.filePath ?? "",
-                                  lineStart: Number(event.target.value),
+                                  filePath: event.target.value,
+                                  lineStart: task.section?.lineStart ?? 1,
                                   lineEnd: task.section?.lineEnd ?? 1,
                                 },
                               })
                             }
-                            placeholder="Start line"
+                            placeholder="relative/path/to/file.ts"
                             className="bg-zinc-950 border border-zinc-700 rounded-md px-2 py-1 text-xs text-zinc-200"
                           />
-                          <input
-                            type="number"
-                            min={1}
-                            value={task.section?.lineEnd ?? 1}
-                            onChange={(event) =>
-                              onUpdateTask(group.id, task.id, {
-                                section: {
-                                  filePath: task.section?.filePath ?? "",
-                                  lineStart: task.section?.lineStart ?? 1,
-                                  lineEnd: Number(event.target.value),
-                                },
-                              })
-                            }
-                            placeholder="End line"
-                            className="bg-zinc-950 border border-zinc-700 rounded-md px-2 py-1 text-xs text-zinc-200"
-                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="number"
+                              min={1}
+                              value={task.section?.lineStart ?? 1}
+                              onChange={(event) =>
+                                onUpdateTask(group.id, task.id, {
+                                  section: {
+                                    filePath: task.section?.filePath ?? "",
+                                    lineStart: Number(event.target.value),
+                                    lineEnd: task.section?.lineEnd ?? 1,
+                                  },
+                                })
+                              }
+                              placeholder="Start line"
+                              className="bg-zinc-950 border border-zinc-700 rounded-md px-2 py-1 text-xs text-zinc-200"
+                            />
+                            <input
+                              type="number"
+                              min={1}
+                              value={task.section?.lineEnd ?? 1}
+                              onChange={(event) =>
+                                onUpdateTask(group.id, task.id, {
+                                  section: {
+                                    filePath: task.section?.filePath ?? "",
+                                    lineStart: task.section?.lineStart ?? 1,
+                                    lineEnd: Number(event.target.value),
+                                  },
+                                })
+                              }
+                              placeholder="End line"
+                              className="bg-zinc-950 border border-zinc-700 rounded-md px-2 py-1 text-xs text-zinc-200"
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="grid grid-cols-1 gap-2">
-                      <label className="text-[10px] uppercase text-zinc-500">
-                        Git branch
-                      </label>
-                      <input
-                        type="text"
-                        value={task.gitBranch}
-                        onChange={(event) =>
-                          onUpdateTask(group.id, task.id, {
-                            gitBranch: event.target.value,
-                          })
-                        }
-                        placeholder="feature/task-branch"
-                        className="bg-zinc-950 border border-zinc-700 rounded-md px-2 py-1 text-xs text-zinc-200"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-2">
-                      <label className="text-[10px] uppercase text-zinc-500">
-                        Worktree path
-                      </label>
-                      <input
-                        type="text"
-                        value={task.worktreePath}
-                        onChange={(event) =>
-                          onUpdateTask(group.id, task.id, {
-                            worktreePath: event.target.value,
-                          })
-                        }
-                        placeholder="Optional worktree path"
-                        className="bg-zinc-950 border border-zinc-700 rounded-md px-2 py-1 text-xs text-zinc-200"
-                      />
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => handleRunTask(task)}
-                        disabled={task.status === "archived"}
-                        className="flex items-center gap-1 text-xs text-emerald-300 hover:text-white disabled:text-zinc-600"
-                      >
-                        <Play className="w-3.5 h-3.5" />
-                        Run
-                      </button>
-                      <button
-                        onClick={() => openSectionModal(task)}
-                        className="flex items-center gap-1 text-xs text-zinc-300 hover:text-white"
-                      >
-                        Show section
-                      </button>
-                      <button
-                        onClick={() => openDiffModal(task)}
-                        disabled={!hasDiff}
-                        className="flex items-center gap-1 text-xs text-zinc-300 hover:text-white disabled:text-zinc-600"
-                      >
-                        Show diff
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (task.status !== "done" || !task.sessionTabId) {
-                            return;
+                      <div className="grid grid-cols-1 gap-2">
+                        <label className="text-[10px] uppercase text-zinc-500">
+                          Git branch
+                        </label>
+                        <input
+                          type="text"
+                          value={task.gitBranch}
+                          onChange={(event) =>
+                            onUpdateTask(group.id, task.id, {
+                              gitBranch: event.target.value,
+                            })
                           }
-                          onOpenSession(task.sessionTabId);
-                        }}
-                        disabled={task.status !== "done" || !task.sessionTabId}
-                        className="flex items-center gap-1 text-xs text-zinc-300 hover:text-white disabled:text-zinc-600"
-                      >
-                        Open session
-                      </button>
-                      <button
-                        onClick={() => refreshDiffStats(task)}
-                        className="flex items-center gap-1 text-xs text-zinc-300 hover:text-white"
-                      >
-                        Refresh diff
-                      </button>
+                          placeholder="feature/task-branch"
+                          className="bg-zinc-950 border border-zinc-700 rounded-md px-2 py-1 text-xs text-zinc-200"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-2">
+                        <label className="text-[10px] uppercase text-zinc-500">
+                          Worktree path
+                        </label>
+                        <input
+                          type="text"
+                          value={task.worktreePath}
+                          onChange={(event) =>
+                            onUpdateTask(group.id, task.id, {
+                              worktreePath: event.target.value,
+                            })
+                          }
+                          placeholder="Optional worktree path"
+                          className="bg-zinc-950 border border-zinc-700 rounded-md px-2 py-1 text-xs text-zinc-200"
+                        />
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => handleRunTask(task)}
+                          disabled={task.status === "archived"}
+                          className="flex items-center gap-1 text-xs text-emerald-300 hover:text-white disabled:text-zinc-600"
+                        >
+                          <Play className="w-3.5 h-3.5" />
+                          Run
+                        </button>
+                        <button
+                          onClick={() => openSectionModal(task)}
+                          className="flex items-center gap-1 text-xs text-zinc-300 hover:text-white"
+                        >
+                          Show section
+                        </button>
+                        <button
+                          onClick={() => openDiffModal(task)}
+                          disabled={!hasDiff}
+                          className="flex items-center gap-1 text-xs text-zinc-300 hover:text-white disabled:text-zinc-600"
+                        >
+                          Show diff
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (task.status !== "done" || !task.sessionTabId) {
+                              return;
+                            }
+                            onOpenSession(task.sessionTabId);
+                          }}
+                          disabled={task.status !== "done" || !task.sessionTabId}
+                          className="flex items-center gap-1 text-xs text-zinc-300 hover:text-white disabled:text-zinc-600"
+                        >
+                          Open session
+                        </button>
+                        <button
+                          onClick={() => refreshDiffStats(task)}
+                          className="flex items-center gap-1 text-xs text-zinc-300 hover:text-white"
+                        >
+                          Refresh diff
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
 
       {sectionModalTask && (

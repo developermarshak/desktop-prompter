@@ -23,6 +23,7 @@ interface PromptEditorToolbarProps {
   showRunDropdown: boolean;
   toolbarRef: RefObject<HTMLDivElement | null>;
   showTemplateToggle?: boolean;
+  showPromptActions?: boolean;
   onTitleChange: (newTitle: string) => void;
   onToggleTemplate: () => void;
   onCopyResolved: () => void;
@@ -43,6 +44,7 @@ export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
   showRunDropdown,
   toolbarRef,
   showTemplateToggle = true,
+  showPromptActions = true,
   onTitleChange,
   onToggleTemplate,
   onCopyResolved,
@@ -67,8 +69,8 @@ export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
   }, [showRunDropdown, onToggleRunDropdown]);
 
   return (
-    <div ref={toolbarRef} className="h-16 border-b border-zinc-800 flex items-center justify-between px-6 bg-zinc-950/50 backdrop-blur-sm sticky top-0 z-10 shrink-0">
-      <div className="flex items-center gap-6 flex-1 min-w-0 mr-4 ml-8 md:ml-0">
+    <div ref={toolbarRef} className="h-12 border-b border-zinc-800 flex items-center justify-between px-4 bg-zinc-950/50 backdrop-blur-sm sticky top-0 z-10 shrink-0">
+      <div className="flex items-center gap-4 flex-1 min-w-0 mr-3 ml-4 md:ml-0">
         <div className="flex-1 max-w-md">
           <input 
             type="text"
@@ -78,9 +80,7 @@ export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
             className="w-full bg-transparent text-lg font-semibold text-zinc-200 focus:outline-none focus:ring-0 placeholder:text-zinc-700"
           />
           <div className="flex items-center gap-2 mt-0.5">
-            {activeTitle && <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">Editable</span>}
             {saveStatus === 'saving' && <span className="flex items-center gap-1 text-[10px] text-indigo-400 font-medium"><RefreshCw className="w-3 h-3 animate-spin"/> Saving...</span>}
-            {saveStatus === 'saved' && activeTitle && <span className="flex items-center gap-1 text-[10px] text-zinc-500 font-medium">All changes saved</span>}
             {saveStatus === 'unsaved' && !activeTitle && value.length > 0 && <span className="flex items-center gap-1 text-[10px] text-amber-500/80 font-medium">Unsaved Draft</span>}
           </div>
         </div>
@@ -173,80 +173,84 @@ export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
           </div>
         )}
 
-        <button
-          onClick={onCopyResolved}
-          title="Copy Ready Prompt (Resolved)"
-          className={`flex items-center ${isCompact ? 'justify-center p-2' : 'gap-2 px-3 py-1.5'} text-xs font-medium text-indigo-300 hover:text-white hover:bg-indigo-500/20 rounded-md transition-colors bg-zinc-900/50 border border-zinc-800`}
-        >
-          {resolvedCopied ? (
-            <span className={`text-emerald-400 font-bold shrink-0 ${isCompact ? 'text-xs' : ''}`}>
-              {isCompact ? '✓' : 'Copied!'}
-            </span>
-          ) : (
-            <>
-              <CopyCheck className="w-3.5 h-3.5 shrink-0" />
-              {!isCompact && <span>Copy Ready</span>}
-            </>
-          )}
-        </button>
+        {showPromptActions && (
+          <>
+            <button
+              onClick={onCopyResolved}
+              title="Copy Ready Prompt (Resolved)"
+              className={`flex items-center ${isCompact ? 'justify-center p-2' : 'gap-2 px-3 py-1.5'} text-xs font-medium text-indigo-300 hover:text-white hover:bg-indigo-500/20 rounded-md transition-colors bg-zinc-900/50 border border-zinc-800`}
+            >
+              {resolvedCopied ? (
+                <span className={`text-emerald-400 font-bold shrink-0 ${isCompact ? 'text-xs' : ''}`}>
+                  {isCompact ? '✓' : 'Copied!'}
+                </span>
+              ) : (
+                <>
+                  <CopyCheck className="w-3.5 h-3.5 shrink-0" />
+                  {!isCompact && <span>Copy Ready</span>}
+                </>
+              )}
+            </button>
 
-        <div className="relative" ref={runDropdownRef}>
-          <button
-            onClick={onToggleRunDropdown}
-            title="Run prompt with AI coding assistant"
-            className={`flex items-center ${isCompact ? 'justify-center p-2' : 'gap-2 px-3 py-1.5'} text-xs font-medium text-emerald-300 hover:text-white hover:bg-emerald-500/20 rounded-md transition-colors bg-zinc-900/50 border border-zinc-800`}
-          >
-            <Play className="w-3.5 h-3.5 shrink-0" />
-            {!isCompact && <span>Run</span>}
-            <ChevronDown className={`w-3 h-3 shrink-0 transition-transform ${showRunDropdown ? 'rotate-180' : ''}`} />
-          </button>
+            <div className="relative" ref={runDropdownRef}>
+              <button
+                onClick={onToggleRunDropdown}
+                title="Run prompt with AI coding assistant"
+                className={`flex items-center ${isCompact ? 'justify-center p-2' : 'gap-2 px-3 py-1.5'} text-xs font-medium text-emerald-300 hover:text-white hover:bg-emerald-500/20 rounded-md transition-colors bg-zinc-900/50 border border-zinc-800`}
+              >
+                <Play className="w-3.5 h-3.5 shrink-0" />
+                {!isCompact && <span>Run</span>}
+                <ChevronDown className={`w-3 h-3 shrink-0 transition-transform ${showRunDropdown ? 'rotate-180' : ''}`} />
+              </button>
 
-          {showRunDropdown && (
-            <div className="absolute right-0 top-full mt-2 w-48 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-              <div className="px-3 py-2 text-xs font-semibold text-zinc-500 border-b border-zinc-800 bg-zinc-950">
-                Run with:
-              </div>
-              <button
-                onClick={() => onRunWithTool('codex')}
-                className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-3"
-              >
-                <div className="w-2 h-2 rounded-full bg-cyan-500 shrink-0" />
-                <span>Codex</span>
-              </button>
-              <button
-                onClick={() => onRunWithTool('claude')}
-                className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-3"
-              >
-                <div className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
-                <span>Claude</span>
-              </button>
-              <button
-                onClick={() => onRunWithTool('claude-ui')}
-                className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-3"
-              >
-                <div className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
-                <span>Claude UI</span>
-              </button>
-              <div className="px-3 py-2 text-xs font-semibold text-zinc-500 border-y border-zinc-800 bg-zinc-950">
-                Open in:
-              </div>
-              <button
-                onClick={() => onOpenInWeb('chatgpt')}
-                className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-3"
-              >
-                <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                <span>ChatGPT.com</span>
-              </button>
-              <button
-                onClick={() => onOpenInWeb('claude')}
-                className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-3"
-              >
-                <div className="w-2 h-2 rounded-full bg-violet-400 shrink-0" />
-                <span>Claude.ai</span>
-              </button>
+              {showRunDropdown && (
+                <div className="absolute right-0 top-full mt-2 w-48 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-3 py-2 text-xs font-semibold text-zinc-500 border-b border-zinc-800 bg-zinc-950">
+                    Run with:
+                  </div>
+                  <button
+                    onClick={() => onRunWithTool('codex')}
+                    className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-3"
+                  >
+                    <div className="w-2 h-2 rounded-full bg-cyan-500 shrink-0" />
+                    <span>Codex</span>
+                  </button>
+                  <button
+                    onClick={() => onRunWithTool('claude')}
+                    className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-3"
+                  >
+                    <div className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                    <span>Claude</span>
+                  </button>
+                  <button
+                    onClick={() => onRunWithTool('claude-ui')}
+                    className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-3"
+                  >
+                    <div className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
+                    <span>Claude UI</span>
+                  </button>
+                  <div className="px-3 py-2 text-xs font-semibold text-zinc-500 border-y border-zinc-800 bg-zinc-950">
+                    Open in:
+                  </div>
+                  <button
+                    onClick={() => onOpenInWeb('chatgpt')}
+                    className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-3"
+                  >
+                    <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                    <span>ChatGPT.com</span>
+                  </button>
+                  <button
+                    onClick={() => onOpenInWeb('claude')}
+                    className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-3"
+                  >
+                    <div className="w-2 h-2 rounded-full bg-violet-400 shrink-0" />
+                    <span>Claude.ai</span>
+                  </button>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
     </div>
   );
