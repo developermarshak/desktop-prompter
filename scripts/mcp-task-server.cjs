@@ -2,27 +2,15 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 const { randomUUID } = require("node:crypto");
-const { createRequire } = require("node:module");
 const process = require("node:process");
-
-const requireFromRoot = createRequire(path.join(__dirname, "..", "package.json"));
-const sdkPackagePath = requireFromRoot.resolve(
-  "@modelcontextprotocol/sdk/package.json",
-);
-const sdkPackageDir = path.dirname(sdkPackagePath);
-const sdkRoot =
-  path.basename(sdkPackageDir) === "cjs" &&
-  path.basename(path.dirname(sdkPackageDir)) === "dist"
-    ? path.resolve(sdkPackageDir, "..", "..")
-    : sdkPackageDir;
-const { Server } = require(path.join(sdkRoot, "dist", "cjs", "server", "index.js"));
+const { Server } = require("../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/index.js");
 const {
   StdioServerTransport,
-} = require(path.join(sdkRoot, "dist", "cjs", "server", "stdio.js"));
+} = require("../node_modules/@modelcontextprotocol/sdk/dist/cjs/server/stdio.js");
 const {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-} = require(path.join(sdkRoot, "dist", "cjs", "types.js"));
+} = require("../node_modules/@modelcontextprotocol/sdk/dist/cjs/types.js");
 
 const DEFAULT_STORE_PATH = path.join(
   os.homedir(),

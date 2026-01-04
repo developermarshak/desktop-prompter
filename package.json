@@ -67,10 +67,5 @@
     "tailwindcss": "^4.1.17",
     "typescript": "~5.8.3",
     "vite": "^7.0.4"
-  },
-  "pkg": {
-    "scripts": [
-      "node_modules/@modelcontextprotocol/sdk/dist/cjs/**/*.js"
-    ]
   }
 }
