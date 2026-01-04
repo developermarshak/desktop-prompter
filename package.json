@@ -12,11 +12,14 @@
     "tauri:build": "bash scripts/build.sh",
     "tauri:install": "bash scripts/install.sh",
     "tauri:build-and-install": "bash scripts/build-and-install.sh",
+    "mcp:task-server": "node scripts/mcp-task-server.cjs",
+    "mcp:task-server:bundle": "node scripts/build-mcp-task-server.js",
     "release:prepare": "node scripts/bump-version.js",
     "release": "bash scripts/release.sh"
   },
   "dependencies": {
     "@google/genai": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.25.1",
     "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-dialog": "^1.1.4",
     "@radix-ui/react-dropdown-menu": "^2.1.15",
@@ -59,6 +62,7 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@vitejs/plugin-react": "^4.6.0",
     "autoprefixer": "^10.4.22",
+    "pkg": "^5.8.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.17",
     "typescript": "~5.8.3",
