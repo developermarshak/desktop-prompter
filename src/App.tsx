@@ -21,7 +21,9 @@ import {
   usePromptsManager,
   useChatManager,
   useSettingsManager,
+  useTaskGroupsManager,
 } from "./hooks";
+import { TaskGroupPanel } from "./components/TaskGroupPanel";
 
 const App: React.FC = () => {
   // Panel visibility state
@@ -37,6 +39,7 @@ const App: React.FC = () => {
   const promptsManager = usePromptsManager();
   const chatManager = useChatManager();
   const settingsManager = useSettingsManager();
+  const taskGroupsManager = useTaskGroupsManager();
 
   const { detachPanel, isDetached } = usePanelContext();
 
@@ -66,6 +69,8 @@ const App: React.FC = () => {
       savedPrompts={promptsManager.savedPrompts}
       archivedTemplates={promptsManager.archivedTemplates}
       archivedPrompts={promptsManager.archivedPrompts}
+      taskGroups={taskGroupsManager.taskGroups}
+      activeTaskGroupId={taskGroupsManager.activeTaskGroupId}
       terminalTabs={terminalManager.terminalTabs}
       waitingTerminalTabIds={terminalManager.terminalWaitingTabs}
       terminalCLIStatus={terminalManager.terminalCLIStatus}
@@ -77,11 +82,17 @@ const App: React.FC = () => {
       onNewTerminalTab={terminalManager.handleNewTerminalTab}
       onCloseTerminalTab={terminalManager.handleCloseTerminalTab}
       onRenameTerminalTab={terminalManager.handleRenameTerminalTab}
-      onSelectTemplate={promptsManager.handleSelectTemplate}
+      onSelectTemplate={(template) => {
+        taskGroupsManager.setActiveTaskGroupId(null);
+        promptsManager.handleSelectTemplate(template);
+      }}
       onDeleteTemplate={promptsManager.handleDeleteTemplate}
       onDuplicateTemplate={promptsManager.handleDuplicateTemplate}
       onRenameTemplate={promptsManager.handleRenameTemplate}
-      onSelectSavedPrompt={promptsManager.handleSelectSavedPrompt}
+      onSelectSavedPrompt={(prompt) => {
+        taskGroupsManager.setActiveTaskGroupId(null);
+        promptsManager.handleSelectSavedPrompt(prompt);
+      }}
       onDeleteSavedPrompt={promptsManager.handleDeleteSavedPrompt}
       onDuplicatePrompt={promptsManager.handleDuplicatePrompt}
       onRenameSavedPrompt={promptsManager.handleRenameSavedPrompt}
@@ -90,13 +101,31 @@ const App: React.FC = () => {
       onToggleArchive={() =>
         promptsManager.setShowArchive(!promptsManager.showArchive)
       }
-      onNewPrompt={promptsManager.handleNewPrompt}
+      onNewPrompt={() => {
+        taskGroupsManager.setActiveTaskGroupId(null);
+        promptsManager.handleNewPrompt();
+      }}
+      onSelectTaskGroup={(group) => {
+        taskGroupsManager.setActiveTaskGroupId(group.id);
+      }}
+      onNewTaskGroup={taskGroupsManager.createTaskGroup}
+      onDeleteTaskGroup={taskGroupsManager.deleteTaskGroup}
+      onRenameTaskGroup={taskGroupsManager.renameTaskGroup}
       activeView={activeView}
       onOpenSettings={() =>
         setActiveView((prev) => (prev === "settings" ? "editor" : "settings"))
       }
     />
   );
+
+  const activeTaskGroup = taskGroupsManager.activeTaskGroup;
+
+  const openTaskSession = (tabId: string) => {
+    const tab = terminalManager.terminalTabs.find((entry) => entry.id === tabId);
+    if (tab) {
+      terminalManager.handleSelectTerminalTab(tab);
+    }
+  };
 
   const mainContent =
     activeView === "settings" ? (
@@ -112,23 +141,61 @@ const App: React.FC = () => {
       />
     ) : (
       <PromptEditor
-        value={promptsManager.promptContent}
-        activeTitle={promptsManager.currentDisplayTitle}
-        saveStatus={promptsManager.saveStatus}
-        onChange={promptsManager.setPromptContent}
-        onTitleChange={promptsManager.handleTitleChange}
+        value={activeTaskGroup ? activeTaskGroup.prompt : promptsManager.promptContent}
+        activeTitle={
+          activeTaskGroup ? activeTaskGroup.name : promptsManager.currentDisplayTitle
+        }
+        saveStatus={activeTaskGroup ? "saved" : promptsManager.saveStatus}
+        onChange={(value) => {
+          if (activeTaskGroup) {
+            taskGroupsManager.updateTaskGroup(activeTaskGroup.id, { prompt: value });
+          } else {
+            promptsManager.setPromptContent(value);
+          }
+        }}
+        onTitleChange={(title) => {
+          if (activeTaskGroup) {
+            taskGroupsManager.renameTaskGroup(activeTaskGroup.id, title);
+          } else {
+            promptsManager.handleTitleChange(title);
+          }
+        }}
         templates={promptsManager.allTemplates}
         savedPrompts={promptsManager.savedPrompts}
         isChatOpen={chatManager.chatOpen}
         onRequestTerminal={terminalManager.createTerminalTab}
-        promptTitle={promptsManager.currentDisplayTitle}
+        promptTitle={
+          activeTaskGroup ? activeTaskGroup.name : promptsManager.currentDisplayTitle
+        }
         activeTerminalTabId={terminalManager.activeTerminalTabId}
         onSaveTerminalSessionPath={terminalManager.setTerminalSessionPath}
         codexSettings={settingsManager.codexSettings}
         claudeSettings={settingsManager.claudeSettings}
         worktreeSettings={settingsManager.worktreeSettings}
-        isTemplate={promptsManager.isTemplate}
-        onToggleTemplate={promptsManager.handleToggleTemplate}
+        isTemplate={activeTaskGroup ? false : promptsManager.isTemplate}
+        onToggleTemplate={activeTaskGroup ? () => {} : promptsManager.handleToggleTemplate}
+        showTemplateToggle={!activeTaskGroup}
+        taskPanel={
+          activeTaskGroup ? (
+            <TaskGroupPanel
+              group={activeTaskGroup}
+              templates={promptsManager.allTemplates}
+              savedPrompts={promptsManager.savedPrompts}
+              codexSettings={settingsManager.codexSettings}
+              claudeSettings={settingsManager.claudeSettings}
+              onUpdateGroup={taskGroupsManager.updateTaskGroup}
+              onCreateTask={taskGroupsManager.createTask}
+              onUpdateTask={taskGroupsManager.updateTask}
+              onDeleteTasks={taskGroupsManager.deleteTasks}
+              onSetTasksStatus={taskGroupsManager.setTasksStatus}
+              onSetTasksSelected={taskGroupsManager.setTasksSelected}
+              onClearSelection={taskGroupsManager.clearTaskSelection}
+              onRequestTerminal={terminalManager.createTerminalTab}
+              onSaveTerminalSessionPath={terminalManager.setTerminalSessionPath}
+              onOpenSession={openTaskSession}
+            />
+          ) : null
+        }
       />
     );
 

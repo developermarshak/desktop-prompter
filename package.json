@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "test:playwright": "playwright test",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:build": "bash scripts/build.sh",
@@ -50,6 +51,7 @@
     "tailwind-merge": "^2.6.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.57.0",
     "@tailwindcss/postcss": "^4.1.17",
     "@tauri-apps/cli": "^2",
     "@types/react": "^19.1.8",

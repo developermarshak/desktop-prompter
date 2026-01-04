@@ -12,3 +12,6 @@ export type { UseChatManagerResult } from "./useChatManager";
 
 export { useSettingsManager } from "./useSettingsManager";
 export type { UseSettingsManagerResult } from "./useSettingsManager";
+
+export { useTaskGroupsManager } from "./useTaskGroupsManager";
+export type { UseTaskGroupsManagerResult } from "./useTaskGroupsManager";

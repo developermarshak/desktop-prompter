@@ -1,4 +1,5 @@
 export * from './types/panels';
+export * from './types/tasks';
 
 export interface PromptTemplate {
   id: string;

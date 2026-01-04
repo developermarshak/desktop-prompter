@@ -4,7 +4,7 @@ use serde::Serialize;
 use std::{
     collections::HashMap,
     io::{Read, Write},
-    path::Path,
+    path::{Path, PathBuf},
     sync::Mutex,
 };
 use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
@@ -30,6 +30,23 @@ struct GitDiffFile {
 struct GitDiffResponse {
     root: String,
     files: Vec<GitDiffFile>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitDiffStatsResponse {
+    added: usize,
+    removed: usize,
+    files_changed: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileSectionResponse {
+    content: String,
+    path: String,
+    start_line: usize,
+    end_line: usize,
 }
 
 struct PtySession {
@@ -82,6 +99,38 @@ fn read_workdir_content(root: &Path, rel_path: &str) -> Option<Vec<u8>> {
 
 fn is_binary_content(bytes: &[u8]) -> bool {
     bytes.iter().any(|byte| *byte == 0)
+}
+
+fn resolve_base_commit<'repo>(
+    repo: &'repo Repository,
+    base_branch: &str,
+) -> Result<git2::Commit<'repo>, String> {
+    let candidates = [
+        base_branch.to_string(),
+        format!("refs/heads/{}", base_branch),
+        format!("refs/remotes/origin/{}", base_branch),
+    ];
+
+    for candidate in candidates {
+        if let Ok(obj) = repo.revparse_single(&candidate) {
+            if let Ok(commit) = obj.peel_to_commit() {
+                return Ok(commit);
+            }
+        }
+    }
+
+    Err(format!("base branch '{}' not found", base_branch))
+}
+
+fn resolve_section_path(root_path: Option<String>, file_path: String) -> Result<PathBuf, String> {
+    let path = PathBuf::from(&file_path);
+    if path.is_absolute() {
+        return Ok(path);
+    }
+    let Some(root) = root_path else {
+        return Err("root path is required for relative file paths".to_string());
+    };
+    Ok(Path::new(&root).join(&file_path))
 }
 
 #[tauri::command]
@@ -159,6 +208,145 @@ fn get_git_diff(path: String) -> Result<GitDiffResponse, String> {
     Ok(GitDiffResponse {
         root: root.to_string_lossy().to_string(),
         files,
+    })
+}
+
+#[tauri::command]
+fn get_git_diff_stats(path: String, base_branch: String) -> Result<GitDiffStatsResponse, String> {
+    let repo = Repository::discover(&path).map_err(|error| error.to_string())?;
+    let base_commit = resolve_base_commit(&repo, &base_branch)?;
+    let base_tree = base_commit.tree().map_err(|error| error.to_string())?;
+
+    let mut diff_opts = DiffOptions::new();
+    diff_opts
+        .include_untracked(true)
+        .recurse_untracked_dirs(true)
+        .include_typechange(true);
+
+    let diff = repo
+        .diff_tree_to_workdir_with_index(Some(&base_tree), Some(&mut diff_opts))
+        .map_err(|error| error.to_string())?;
+
+    let stats = diff.stats().map_err(|error| error.to_string())?;
+
+    Ok(GitDiffStatsResponse {
+        added: stats.insertions() as usize,
+        removed: stats.deletions() as usize,
+        files_changed: stats.files_changed() as usize,
+    })
+}
+
+#[tauri::command]
+fn get_git_diff_base(path: String, base_branch: String) -> Result<GitDiffResponse, String> {
+    let repo = Repository::discover(&path).map_err(|error| error.to_string())?;
+    let root = repo
+        .workdir()
+        .ok_or_else(|| "repository has no working directory".to_string())?;
+    let base_commit = resolve_base_commit(&repo, &base_branch)?;
+    let base_tree = base_commit.tree().map_err(|error| error.to_string())?;
+
+    let mut diff_opts = DiffOptions::new();
+    diff_opts
+        .include_untracked(true)
+        .recurse_untracked_dirs(true)
+        .include_typechange(true);
+
+    let diff = repo
+        .diff_tree_to_workdir_with_index(Some(&base_tree), Some(&mut diff_opts))
+        .map_err(|error| error.to_string())?;
+
+    let mut files = Vec::new();
+    for delta in diff.deltas() {
+        let path = delta
+            .new_file()
+            .path()
+            .or_else(|| delta.old_file().path());
+        let Some(path) = path else {
+            continue;
+        };
+        let path = path.to_string_lossy().to_string();
+
+        let old_bytes = read_blob_content(&repo, delta.old_file().id());
+        let new_bytes = read_workdir_content(root, &path);
+
+        let old_is_binary = old_bytes
+            .as_ref()
+            .map(|bytes| is_binary_content(bytes))
+            .unwrap_or(false);
+        let new_is_binary = new_bytes
+            .as_ref()
+            .map(|bytes| is_binary_content(bytes))
+            .unwrap_or(false);
+        let is_binary = old_is_binary || new_is_binary;
+
+        let old_content = if is_binary {
+            String::new()
+        } else {
+            old_bytes
+                .as_ref()
+                .map(|bytes| String::from_utf8_lossy(bytes).to_string())
+                .unwrap_or_default()
+        };
+        let new_content = if is_binary {
+            String::new()
+        } else {
+            new_bytes
+                .as_ref()
+                .map(|bytes| String::from_utf8_lossy(bytes).to_string())
+                .unwrap_or_default()
+        };
+
+        files.push(GitDiffFile {
+            path,
+            status: delta_status_label(delta.status()).to_string(),
+            old_content,
+            new_content,
+            is_binary,
+        });
+    }
+
+    Ok(GitDiffResponse {
+        root: root.to_string_lossy().to_string(),
+        files,
+    })
+}
+
+#[tauri::command]
+fn get_file_section(
+    root_path: Option<String>,
+    file_path: String,
+    line_start: usize,
+    line_end: usize,
+) -> Result<FileSectionResponse, String> {
+    let path = resolve_section_path(root_path, file_path)?;
+    let content = std::fs::read_to_string(&path).map_err(|error| error.to_string())?;
+    let lines: Vec<&str> = content.lines().collect();
+
+    if lines.is_empty() {
+        return Ok(FileSectionResponse {
+            content: String::new(),
+            path: path.to_string_lossy().to_string(),
+            start_line: line_start.max(1),
+            end_line: line_start.max(1),
+        });
+    }
+
+    let start = line_start.max(1);
+    let end = line_end.max(start);
+    let start_index = start - 1;
+    let end_index = end.min(lines.len());
+
+    let snippet = if start_index >= lines.len() {
+        String::new()
+    } else {
+        lines[start_index..end_index].join("\n")
+    };
+
+    Ok(FileSectionResponse {
+        content: snippet,
+        path: path.to_string_lossy().to_string(),
+        start_line: start,
+        end_line: end_index,
     })
 }
 
@@ -362,6 +550,9 @@ pub fn run() {
             resize_pty,
             close_pty,
             get_git_diff,
+            get_git_diff_stats,
+            get_git_diff_base,
+            get_file_section,
             create_panel_window,
             close_panel_window
         ])

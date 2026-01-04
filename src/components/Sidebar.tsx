@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PromptTemplate, SavedPrompt, TerminalTab, CLIStatus } from '../types';
+import { PromptTemplate, SavedPrompt, TerminalTab, CLIStatus, TaskGroup } from '../types';
 import { LayoutTemplate, Plus, Trash2, Clock, FileBadge, Archive, RotateCcw, Copy, Settings, Terminal, X } from 'lucide-react';
 
 interface SidebarProps {
@@ -7,6 +7,8 @@ interface SidebarProps {
   savedPrompts: SavedPrompt[];
   archivedTemplates: PromptTemplate[];
   archivedPrompts: SavedPrompt[];
+  taskGroups: TaskGroup[];
+  activeTaskGroupId: string | null;
   terminalTabs: TerminalTab[];
   waitingTerminalTabIds?: Set<string>;
   terminalCLIStatus?: Map<string, CLIStatus>;
@@ -30,6 +32,10 @@ interface SidebarProps {
   onRestorePrompt: (prompt: SavedPrompt) => void;
   onToggleArchive: () => void;
   onNewPrompt: () => void;
+  onSelectTaskGroup: (group: TaskGroup) => void;
+  onNewTaskGroup: () => void;
+  onDeleteTaskGroup: (id: string) => void;
+  onRenameTaskGroup: (id: string, name: string) => void;
   isOpen: boolean;
   activeView: 'editor' | 'settings';
   onOpenSettings: () => void;
@@ -40,6 +46,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   savedPrompts,
   archivedTemplates,
   archivedPrompts,
+  taskGroups,
+  activeTaskGroupId,
   terminalTabs,
   waitingTerminalTabIds,
   terminalCLIStatus,
@@ -63,6 +71,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onRestorePrompt,
   onToggleArchive,
   onNewPrompt,
+  onSelectTaskGroup,
+  onNewTaskGroup,
+  onDeleteTaskGroup,
+  onRenameTaskGroup,
   isOpen,
   activeView,
   onOpenSettings,
@@ -75,6 +87,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [templateNameDraft, setTemplateNameDraft] = useState('');
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
   const [promptTitleDraft, setPromptTitleDraft] = useState('');
+  const [editingTaskGroupId, setEditingTaskGroupId] = useState<string | null>(null);
+  const [taskGroupNameDraft, setTaskGroupNameDraft] = useState('');
 
   const beginTerminalRename = (tab: TerminalTab) => {
     setEditingTerminalTabId(tab.id);
@@ -142,6 +156,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setPromptTitleDraft('');
   };
 
+  const beginTaskGroupRename = (group: TaskGroup) => {
+    setEditingTaskGroupId(group.id);
+    setTaskGroupNameDraft(group.name);
+  };
+
+  const commitTaskGroupRename = () => {
+    if (!editingTaskGroupId) {
+      return;
+    }
+    const nextName = taskGroupNameDraft.trim();
+    if (nextName.length > 0) {
+      onRenameTaskGroup(editingTaskGroupId, nextName);
+    }
+    setEditingTaskGroupId(null);
+    setTaskGroupNameDraft('');
+  };
+
+  const cancelTaskGroupRename = () => {
+    setEditingTaskGroupId(null);
+    setTaskGroupNameDraft('');
+  };
+
   // Unified list: Custom templates first, then System templates
   const unifiedTemplates = [...templates].sort((a, b) => {
     // Priority: Custom > System
@@ -154,6 +190,81 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside className="w-full bg-zinc-900 border-r border-zinc-800 flex flex-col h-full shrink-0 transition-all duration-300">
       <div className="flex-1 overflow-y-auto custom-scrollbar">
+        {/* Task Groups Section */}
+        <div className="p-2 pb-1.5">
+          <div className="flex items-center justify-between mb-1.5 px-1">
+            <h2 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+              <LayoutTemplate className="w-2.5 h-2.5" /> Task Groups
+            </h2>
+            <button
+              onClick={onNewTaskGroup}
+              className="p-0.5 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+              title="New Task Group"
+            >
+              <Plus className="w-3 h-3" />
+            </button>
+          </div>
+          <div className="space-y-0">
+            {taskGroups.length === 0 ? (
+              <p className="text-zinc-600 text-[10px] italic px-2">No task groups yet.</p>
+            ) : (
+              taskGroups.map((group) => {
+                const isActive = group.id === activeTaskGroupId;
+                const isEditing = editingTaskGroupId === group.id;
+                return (
+                  <div
+                    key={group.id}
+                    onClick={() => onSelectTaskGroup(group)}
+                    onDoubleClick={() => beginTaskGroupRename(group)}
+                    className={`group flex items-center justify-between px-2 py-1.5 text-xs transition-colors cursor-pointer ${
+                      isActive
+                        ? 'bg-zinc-800 text-white'
+                        : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                    }`}
+                  >
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={taskGroupNameDraft}
+                        onChange={(event) => setTaskGroupNameDraft(event.target.value)}
+                        onBlur={commitTaskGroupRename}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            commitTaskGroupRename();
+                          }
+                          if (event.key === 'Escape') {
+                            cancelTaskGroupRename();
+                          }
+                        }}
+                        onClick={(event) => event.stopPropagation()}
+                        onDoubleClick={(event) => event.stopPropagation()}
+                        className="flex-1 bg-zinc-900/70 border border-zinc-700 rounded px-1 py-0.5 text-xs text-zinc-200 focus:outline-none focus:ring-0 mr-1"
+                        autoFocus
+                      />
+                    ) : (
+                      <span className="flex-1 truncate mr-1">
+                        {group.name || 'Untitled Group'}
+                      </span>
+                    )}
+                    <button
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onDeleteTaskGroup(group.id);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-red-900/30 text-zinc-500 hover:text-red-400 transition-all"
+                      title="Delete Task Group"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        <div className="h-px bg-zinc-800 mx-1.5 my-1" />
+
         {/* Snippets Section */}
         <div className="p-2 pb-1.5">
           <h2 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-1.5 flex items-center gap-1 px-1">

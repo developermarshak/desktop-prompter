@@ -26,6 +26,8 @@ interface PromptEditorProps {
   worktreeSettings: WorktreeSettings;
   isTemplate: boolean;
   onToggleTemplate: () => void;
+  showTemplateToggle?: boolean;
+  taskPanel?: React.ReactNode;
 }
 
 export const PromptEditor: React.FC<PromptEditorProps> = ({
@@ -45,7 +47,9 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
   claudeSettings,
   worktreeSettings,
   isTemplate,
-  onToggleTemplate
+  onToggleTemplate,
+  showTemplateToggle = true,
+  taskPanel,
 }) => {
   const {
     resolvedCopied,
@@ -108,6 +112,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
         resolvedCopied={resolvedCopied}
         showRunDropdown={showRunDropdown}
         toolbarRef={toolbarRef}
+        showTemplateToggle={showTemplateToggle}
         onTitleChange={onTitleChange}
         onToggleTemplate={onToggleTemplate}
         onCopyResolved={handleCopyResolved}
@@ -129,31 +134,64 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({
 
       {/* Editor Content Area */}
       <div className="flex-1 min-h-0 overflow-hidden relative group">
-        <PromptEditorContent
-          value={value}
-          viewMode={viewMode}
-          onChange={handleChange}
-          onSelect={handleSelect}
-          onKeyDown={handleKeyDown}
-          templates={templates}
-          savedPrompts={savedPrompts}
-          textareaRef={textareaRef}
-        />
-        
-        {/* Autocomplete Popup */}
-        <PromptEditorAutocomplete
-          showSuggestions={showSuggestions}
-          suggestions={suggestions}
-          selectedIndex={selectedIndex}
-          onAcceptSuggestion={acceptSuggestion}
-        />
+        {taskPanel ? (
+          <div className="h-full flex min-h-0">
+            <div className="relative flex-1 min-w-0 border-r border-zinc-800">
+              <PromptEditorContent
+                value={value}
+                viewMode={viewMode}
+                onChange={handleChange}
+                onSelect={handleSelect}
+                onKeyDown={handleKeyDown}
+                templates={templates}
+                savedPrompts={savedPrompts}
+                textareaRef={textareaRef}
+              />
 
-        {/* Active Reference Inspector */}
-        <PromptEditorReferenceInspector
-          activeRef={activeRef}
-          showSuggestions={showSuggestions}
-          hoveredRef={hoveredRef}
-        />
+              <PromptEditorAutocomplete
+                showSuggestions={showSuggestions}
+                suggestions={suggestions}
+                selectedIndex={selectedIndex}
+                onAcceptSuggestion={acceptSuggestion}
+              />
+
+              <PromptEditorReferenceInspector
+                activeRef={activeRef}
+                showSuggestions={showSuggestions}
+                hoveredRef={hoveredRef}
+              />
+            </div>
+            <div className="w-[36%] min-w-[280px] max-w-[520px]">
+              {taskPanel}
+            </div>
+          </div>
+        ) : (
+          <>
+            <PromptEditorContent
+              value={value}
+              viewMode={viewMode}
+              onChange={handleChange}
+              onSelect={handleSelect}
+              onKeyDown={handleKeyDown}
+              templates={templates}
+              savedPrompts={savedPrompts}
+              textareaRef={textareaRef}
+            />
+
+            <PromptEditorAutocomplete
+              showSuggestions={showSuggestions}
+              suggestions={suggestions}
+              selectedIndex={selectedIndex}
+              onAcceptSuggestion={acceptSuggestion}
+            />
+
+            <PromptEditorReferenceInspector
+              activeRef={activeRef}
+              showSuggestions={showSuggestions}
+              hoveredRef={hoveredRef}
+            />
+          </>
+        )}
       </div>
 
       {/* Directory Selection Modal */}

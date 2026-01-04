@@ -22,6 +22,7 @@ interface PromptEditorToolbarProps {
   resolvedCopied: boolean;
   showRunDropdown: boolean;
   toolbarRef: RefObject<HTMLDivElement | null>;
+  showTemplateToggle?: boolean;
   onTitleChange: (newTitle: string) => void;
   onToggleTemplate: () => void;
   onCopyResolved: () => void;
@@ -41,6 +42,7 @@ export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
   resolvedCopied,
   showRunDropdown,
   toolbarRef,
+  showTemplateToggle = true,
   onTitleChange,
   onToggleTemplate,
   onCopyResolved,
@@ -111,63 +113,65 @@ export const PromptEditorToolbar: React.FC<PromptEditorToolbarProps> = ({
       <div className="flex items-center gap-3 shrink-0">
         <div className="w-px h-6 bg-zinc-800 mx-1" />
 
-        <div className="flex items-center gap-2">
-          {!isCompact ? (
-            <>
-              <span className={`text-xs font-medium transition-colors ${
-                !isTemplate ? 'text-emerald-400' : 'text-zinc-500'
-              }`}>Prompt</span>
-              <button
-                onClick={onToggleTemplate}
-                title={isTemplate ? "Save as Snippet (Click to save as Prompt)" : "Save as Prompt (Click to save as Snippet)"}
-                className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-zinc-950"
-                role="switch"
-                aria-checked={isTemplate}
-              >
-                <span
-                  className={`absolute inset-0 rounded-full transition-colors duration-200 ease-in-out ${
-                    isTemplate ? 'bg-indigo-600' : 'bg-emerald-600'
-                  }`}
-                />
-                <span
-                  className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-all duration-200 ease-in-out ${
-                    isTemplate ? 'left-6' : 'left-1'
-                  }`}
-                />
-              </button>
-              <span className={`text-xs font-medium transition-colors ${
-                isTemplate ? 'text-indigo-400' : 'text-zinc-500'
-              }`}>Snippet</span>
-            </>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              <FileText className={`w-3.5 h-3.5 transition-colors ${
-                !isTemplate ? 'text-emerald-400' : 'text-zinc-500'
-              }`} />
-              <button
-                onClick={onToggleTemplate}
-                title={isTemplate ? "Save as Snippet (Click to save as Prompt)" : "Save as Prompt (Click to save as Snippet)"}
-                className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-zinc-950"
-                role="switch"
-                aria-checked={isTemplate}
-              >
-                <span
-                  className={`absolute inset-0 rounded-full transition-colors duration-200 ease-in-out ${
-                    isTemplate ? 'bg-indigo-600' : 'bg-emerald-600'
-                  }`}
-                />
-                <span
-                  className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-all duration-200 ease-in-out ${
-                    isTemplate ? 'left-6' : 'left-1'
-                  }`}
-                />
-              </button>
-              <LayoutTemplate className={`w-3.5 h-3.5 transition-colors ${
-                isTemplate ? 'text-indigo-400' : 'text-zinc-500'
-              }`} />
-            </div>
-          )}
-        </div>
+        {showTemplateToggle && (
+          <div className="flex items-center gap-2">
+            {!isCompact ? (
+              <>
+                <span className={`text-xs font-medium transition-colors ${
+                  !isTemplate ? 'text-emerald-400' : 'text-zinc-500'
+                }`}>Prompt</span>
+                <button
+                  onClick={onToggleTemplate}
+                  title={isTemplate ? "Save as Snippet (Click to save as Prompt)" : "Save as Prompt (Click to save as Snippet)"}
+                  className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-zinc-950"
+                  role="switch"
+                  aria-checked={isTemplate}
+                >
+                  <span
+                    className={`absolute inset-0 rounded-full transition-colors duration-200 ease-in-out ${
+                      isTemplate ? 'bg-indigo-600' : 'bg-emerald-600'
+                    }`}
+                  />
+                  <span
+                    className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-all duration-200 ease-in-out ${
+                      isTemplate ? 'left-6' : 'left-1'
+                    }`}
+                  />
+                </button>
+                <span className={`text-xs font-medium transition-colors ${
+                  isTemplate ? 'text-indigo-400' : 'text-zinc-500'
+                }`}>Snippet</span>
+              </>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <FileText className={`w-3.5 h-3.5 transition-colors ${
+                  !isTemplate ? 'text-emerald-400' : 'text-zinc-500'
+                }`} />
+                <button
+                  onClick={onToggleTemplate}
+                  title={isTemplate ? "Save as Snippet (Click to save as Prompt)" : "Save as Prompt (Click to save as Snippet)"}
+                  className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-zinc-950"
+                  role="switch"
+                  aria-checked={isTemplate}
+                >
+                  <span
+                    className={`absolute inset-0 rounded-full transition-colors duration-200 ease-in-out ${
+                      isTemplate ? 'bg-indigo-600' : 'bg-emerald-600'
+                    }`}
+                  />
+                  <span
+                    className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-all duration-200 ease-in-out ${
+                      isTemplate ? 'left-6' : 'left-1'
+                    }`}
+                  />
+                </button>
+                <LayoutTemplate className={`w-3.5 h-3.5 transition-colors ${
+                  isTemplate ? 'text-indigo-400' : 'text-zinc-500'
+                }`} />
+              </div>
+            )}
+          </div>
+        )}
 
         <button
           onClick={onCopyResolved}
