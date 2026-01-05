@@ -218,13 +218,15 @@ export const TaskGroupPanel = ({
 
       const sectionContent = await loadSectionContent(task);
       const sectionLabel = formatSectionLabel(task);
-      const formattedSection = sectionContent
-        ? `Section (${sectionLabel}):\n\`\`\`\n${sectionContent}\n\`\`\``
-        : `Section (${sectionLabel}):\n(section content unavailable)`;
+      const formattedSection = group.useGitSectionLabel
+        ? `\`\`\`git\n${sectionLabel}\n\`\`\``
+        : sectionContent
+          ? `Section (${sectionLabel}):\n\`\`\`\n${sectionContent}\n\`\`\``
+          : `Section (${sectionLabel}):\n(section content unavailable)`;
 
       return resolvedPrompt.replace(placeholderToken, formattedSection);
     },
-    [group.prompt, loadSectionContent, savedPrompts, templates],
+    [group.prompt, group.useGitSectionLabel, loadSectionContent, savedPrompts, templates],
   );
 
   const handleStartMcpSession = useCallback(async () => {
@@ -654,6 +656,19 @@ export const TaskGroupPanel = ({
               className="w-4 h-4 rounded border-zinc-600 bg-zinc-950 text-indigo-500 focus:ring-indigo-500/50 focus:ring-offset-0"
             />
             Run in worktree
+          </label>
+          <label className="flex items-center gap-2 text-xs text-zinc-300">
+            <input
+              type="checkbox"
+              checked={group.useGitSectionLabel}
+              onChange={(event) =>
+                onUpdateGroup(group.id, {
+                  useGitSectionLabel: event.target.checked,
+                })
+              }
+              className="w-4 h-4 rounded border-zinc-600 bg-zinc-950 text-indigo-500 focus:ring-indigo-500/50 focus:ring-offset-0"
+            />
+            Use git section label
           </label>
           <p className="text-[10px] text-zinc-500">
             Tip: use &#123;&#123;section&#125;&#125; in the prompt to inject task

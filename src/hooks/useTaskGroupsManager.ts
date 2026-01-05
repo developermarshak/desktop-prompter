@@ -26,6 +26,7 @@ const createEmptyTaskGroup = (): TaskGroup => ({
   prompt: "",
   runner: "codex",
   runInWorktree: false,
+  useGitSectionLabel: false,
   projectPath: "",
   baseBranch: "main",
   tasks: [],

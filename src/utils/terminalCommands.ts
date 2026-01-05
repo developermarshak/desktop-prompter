@@ -62,23 +62,41 @@ export const buildCodexCommand = (
   settings.imagePaths.forEach((path) => pushValue("--image", path));
 
   const baseCommand = args.join(" ");
+  const hasPrompt = prompt.trim().length > 0;
 
-  if (settings.runMode === "exec") {
+  const buildTempPromptCommand = (runCommand: string) => {
     let label = "CODEX_PROMPT";
     while (prompt.includes(label)) {
       label = `CODEX_PROMPT_${Math.random().toString(36).slice(2, 8)}`;
     }
-    const execCommand = `${baseCommand} - <<'${label}'\n${prompt}\n${label}`;
-    if (!cwd || !useShellCd) return execCommand;
-    return `cd ${shellEscape(cwd)}\n${execCommand}`;
+    const lines = [];
+    if (cwd && useShellCd) {
+      lines.push(`cd ${shellEscape(cwd)}`);
+    }
+    lines.push(
+      'tmpfile="$(mktemp -t codex-prompt.XXXXXX)"',
+      `cat <<'${label}' > "$tmpfile"`,
+      prompt,
+      label,
+      runCommand,
+      'rm -f "$tmpfile"',
+    );
+    return lines.join("\n");
+  };
+
+  if (settings.runMode === "exec") {
+    if (!hasPrompt) {
+      if (!cwd || !useShellCd) return baseCommand;
+      return `cd ${shellEscape(cwd)}\n${baseCommand}`;
+    }
+    return buildTempPromptCommand(`cat "$tmpfile" | ${baseCommand} -`);
   }
 
-  if (prompt.trim()) {
-    args.push(ansiCQuote(prompt));
+  if (!hasPrompt) {
+    if (!cwd || !useShellCd) return baseCommand;
+    return `cd ${shellEscape(cwd)}\n${baseCommand}`;
   }
-  const tuiCommand = args.join(" ");
-  if (!cwd || !useShellCd) return tuiCommand;
-  return `cd ${shellEscape(cwd)}\n${tuiCommand}`;
+  return buildTempPromptCommand(`${baseCommand} "$(cat "$tmpfile")"`);
 };
 
 export const buildClaudeCommand = (

@@ -43,6 +43,7 @@ export interface TaskGroup {
   prompt: string;
   runner: TaskRunner;
   runInWorktree: boolean;
+  useGitSectionLabel: boolean;
   projectPath: string;
   baseBranch: string;
   tasks: Task[];
