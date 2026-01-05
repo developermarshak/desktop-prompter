@@ -24,6 +24,7 @@ import {
   useTaskGroupsManager,
 } from "./hooks";
 import { TaskGroupPanel } from "./components/TaskGroupPanel";
+import { TaskSectionPreview } from "./types";
 
 const App: React.FC = () => {
   // Panel visibility state
@@ -41,6 +42,8 @@ const App: React.FC = () => {
   const settingsManager = useSettingsManager();
   const taskGroupsManager = useTaskGroupsManager();
   const [migrationToast, setMigrationToast] = useState<string | null>(null);
+  const [taskSectionPreview, setTaskSectionPreview] =
+    useState<TaskSectionPreview | null>(null);
 
   const { detachPanel, isDetached } = usePanelContext();
 
@@ -122,6 +125,10 @@ const App: React.FC = () => {
   const activeTaskGroup = taskGroupsManager.activeTaskGroup;
 
   useEffect(() => {
+    setTaskSectionPreview(null);
+  }, [taskGroupsManager.activeTaskGroupId]);
+
+  useEffect(() => {
     if (!taskGroupsManager.migrationNotice) {
       return;
     }
@@ -177,6 +184,8 @@ const App: React.FC = () => {
       onToggleTemplate={activeTaskGroup ? () => {} : promptsManager.handleToggleTemplate}
       showTemplateToggle={!activeTaskGroup}
       showPromptActions={!activeTaskGroup}
+      sectionPreview={taskSectionPreview}
+      onCloseSectionPreview={() => setTaskSectionPreview(null)}
     />
   );
 
@@ -199,6 +208,7 @@ const App: React.FC = () => {
         savedPrompts={promptsManager.savedPrompts}
         codexSettings={settingsManager.codexSettings}
         claudeSettings={settingsManager.claudeSettings}
+        onSetSectionPreview={setTaskSectionPreview}
         onUpdateGroup={taskGroupsManager.updateTaskGroup}
         onCreateTask={taskGroupsManager.createTask}
         onUpdateTask={taskGroupsManager.updateTask}

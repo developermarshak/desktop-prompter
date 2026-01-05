@@ -162,10 +162,19 @@ fn resolve_section_path(root_path: Option<String>, file_path: String) -> Result<
     if path.is_absolute() {
         return Ok(path);
     }
-    let Some(root) = root_path else {
-        return Err("root path is required for relative file paths".to_string());
-    };
-    Ok(Path::new(&root).join(&file_path))
+    let cleaned_root = root_path.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    });
+    if let Some(root) = cleaned_root {
+        return Ok(Path::new(&root).join(&file_path));
+    }
+    let cwd = std::env::current_dir().map_err(|error| error.to_string())?;
+    Ok(cwd.join(&file_path))
 }
 
 fn resolve_prompter_store_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {

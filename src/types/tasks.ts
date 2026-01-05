@@ -8,6 +8,16 @@ export interface TaskSection {
   lineEnd: number;
 }
 
+export interface TaskSectionPreview {
+  title: string;
+  label: string;
+  filePath: string;
+  lineStart: number;
+  content: string;
+  loading: boolean;
+  error: string | null;
+}
+
 export interface TaskDiffStats {
   added: number;
   removed: number;

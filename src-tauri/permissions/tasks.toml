@@ -14,3 +14,8 @@ commands.allow = ["load_task_groups"]
 identifier = "allow-save-task-groups"
 description = "Allow saving task groups to the JSON store."
 commands.allow = ["save_task_groups"]
+
+[[permission]]
+identifier = "allow-get-file-section"
+description = "Allow loading a file section for a task."
+commands.allow = ["get_file_section"]

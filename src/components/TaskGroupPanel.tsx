@@ -22,6 +22,7 @@ import {
   Task,
   TaskGroup,
   TaskStatus,
+  TaskSectionPreview,
 } from "../types";
 import { resolvePromptRefs } from "../utils";
 import { buildClaudeCommand, buildCodexCommand, shellEscape } from "../utils/terminalCommands";
@@ -68,6 +69,7 @@ interface TaskGroupPanelProps {
   onRequestTerminal: (title?: string, type?: "terminal" | "claude") => string | null;
   onSaveTerminalSessionPath?: (tabId: string, path: string) => void;
   onOpenSession: (tabId: string) => void;
+  onSetSectionPreview: (preview: TaskSectionPreview | null) => void;
 }
 
 const statusOrder: TaskStatus[] = [
@@ -143,6 +145,7 @@ export const TaskGroupPanel = ({
   onRequestTerminal,
   onSaveTerminalSessionPath,
   onOpenSession,
+  onSetSectionPreview,
 }: TaskGroupPanelProps) => {
   const codexMcpSessionSettings = useMemo(
     () => ({
@@ -153,10 +156,6 @@ export const TaskGroupPanel = ({
   );
 
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
-  const [sectionModalTask, setSectionModalTask] = useState<Task | null>(null);
-  const [sectionModalContent, setSectionModalContent] = useState<string>("");
-  const [sectionModalLoading, setSectionModalLoading] = useState(false);
-  const [sectionModalError, setSectionModalError] = useState<string | null>(null);
   const [diffModalTask, setDiffModalTask] = useState<Task | null>(null);
   const [diffModalResponse, setDiffModalResponse] = useState<GitDiffResponse | null>(null);
   const [diffModalLoading, setDiffModalLoading] = useState(false);
@@ -171,27 +170,33 @@ export const TaskGroupPanel = ({
     group.tasks.length > 0 && selectedTaskIds.length === group.tasks.length;
 
   const loadSectionContent = useCallback(
-    async (task: Task) => {
+    async (task: Task, options?: { surfaceErrors?: boolean }) => {
       if (!task.section || !task.section.filePath) {
         return "";
       }
       if (!isTauri()) {
         return "";
       }
+      const rootPath = group.runInWorktree
+        ? task.worktreePath || group.projectPath
+        : group.projectPath;
       try {
         const response = await invoke<FileSectionResponse>("get_file_section", {
-          root_path: group.projectPath,
-          file_path: task.section.filePath,
-          line_start: task.section.lineStart,
-          line_end: task.section.lineEnd,
+          rootPath,
+          filePath: task.section.filePath,
+          lineStart: task.section.lineStart,
+          lineEnd: task.section.lineEnd,
         });
         return response.content;
       } catch (error) {
         console.error("Failed to load file section", error);
+        if (options?.surfaceErrors) {
+          throw error;
+        }
         return "";
       }
     },
-    [group.projectPath],
+    [group.projectPath, group.runInWorktree],
   );
 
   const buildTaskPrompt = useCallback(
@@ -318,20 +323,18 @@ export const TaskGroupPanel = ({
       if (!isTauri()) {
         return;
       }
-      const repoPath = group.runInWorktree
-        ? task.worktreePath || group.projectPath
-        : group.projectPath;
-      if (!repoPath || !group.baseBranch.trim()) {
+      if (!task.worktreePath?.trim()) {
+        return;
+      }
+      const repoPath = task.worktreePath;
+      if (!group.baseBranch.trim()) {
         return;
       }
       try {
-        const response = await invoke<DiffStatsResponse>(
-          "get_git_diff_stats",
-          {
-            path: repoPath,
-            base_branch: group.baseBranch.trim(),
-          },
-        );
+        const response = await invoke<DiffStatsResponse>("get_git_diff_stats", {
+          path: repoPath,
+          baseBranch: group.baseBranch.trim(),
+        });
         onUpdateTask(group.id, task.id, {
           diffStats: {
             added: response.added,
@@ -367,27 +370,45 @@ export const TaskGroupPanel = ({
     void Promise.all(tasksNeedingStats.map((task) => refreshDiffStats(task)));
   }, [group.baseBranch, group.projectPath, group.tasks, refreshDiffStats]);
 
-  const openSectionModal = useCallback(
+  const openSectionPreview = useCallback(
     async (task: Task) => {
-      setSectionModalTask(task);
-      setSectionModalContent("");
-      setSectionModalError(null);
-      setSectionModalLoading(true);
+      const label = formatSectionLabel(task);
+      const lineStart = task.section?.lineStart ?? 1;
+      const lineEnd = task.section?.lineEnd ?? lineStart;
+      const filePath = task.section?.filePath ?? "";
+      onSetSectionPreview({
+        title: task.name,
+        label,
+        filePath,
+        lineStart,
+        content: "",
+        loading: true,
+        error: null,
+      });
       try {
-        const content = await loadSectionContent(task);
-        const label = formatSectionLabel(task);
-        setSectionModalContent(
-          content
-            ? `Section (${label})\n\n${content}`
-            : `Section (${label})\n\n(section content unavailable)`,
-        );
+        const content = await loadSectionContent(task, { surfaceErrors: true });
+        onSetSectionPreview({
+          title: task.name,
+          label,
+          filePath,
+          lineStart,
+          content: content || "(section content unavailable)",
+          loading: false,
+          error: null,
+        });
       } catch (error) {
-        setSectionModalError("Failed to load section content.");
-      } finally {
-        setSectionModalLoading(false);
+        onSetSectionPreview({
+          title: task.name,
+          label,
+          filePath,
+          lineStart,
+          content: "",
+          loading: false,
+          error: "Failed to load section content.",
+        });
       }
     },
-    [loadSectionContent],
+    [loadSectionContent, onSetSectionPreview],
   );
 
   const openDiffModal = useCallback(
@@ -724,11 +745,13 @@ export const TaskGroupPanel = ({
             group.tasks.map((task) => {
               const isExpanded = expandedTaskId === task.id;
               const diffStats = task.diffStats;
+              const hasWorktree = Boolean(task.worktreePath?.trim());
               const diffLabel = diffStats
                 ? `+${diffStats.added} -${diffStats.removed}`
                 : "--";
               const hasDiff =
                 diffStats && (diffStats.added > 0 || diffStats.removed > 0);
+              const showDiffStats = hasWorktree && Boolean(diffStats);
               return (
                 <div
                   key={task.id}
@@ -782,9 +805,25 @@ export const TaskGroupPanel = ({
                   </div>
 
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-                    <span>{formatSectionLabel(task)}</span>
-                    <span className="text-zinc-600">|</span>
-                    <span className="font-mono">{diffLabel}</span>
+                    <button
+                      type="button"
+                      onClick={() => openSectionPreview(task)}
+                      disabled={!task.section?.filePath}
+                      title={
+                        task.section?.filePath
+                          ? "Show section"
+                          : "No section set"
+                      }
+                      className="text-zinc-400 hover:text-white disabled:text-zinc-600"
+                    >
+                      {formatSectionLabel(task)}
+                    </button>
+                    {showDiffStats && (
+                      <>
+                        <span className="text-zinc-600">|</span>
+                        <span className="font-mono">{diffLabel}</span>
+                      </>
+                    )}
                     {task.gitBranch && (
                       <>
                         <span className="text-zinc-600">|</span>
@@ -899,7 +938,7 @@ export const TaskGroupPanel = ({
                           Run
                         </button>
                         <button
-                          onClick={() => openSectionModal(task)}
+                          onClick={() => openSectionPreview(task)}
                           className="flex items-center gap-1 text-xs text-zinc-300 hover:text-white"
                         >
                           Show section
@@ -938,31 +977,6 @@ export const TaskGroupPanel = ({
           )}
         </div>
       </div>
-
-      {sectionModalTask && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[70vh] overflow-hidden flex flex-col">
-            <div className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between">
-              <div className="text-sm text-zinc-200">
-                {sectionModalTask.name}
-              </div>
-              <button
-                onClick={() => setSectionModalTask(null)}
-                className="text-zinc-500 hover:text-white"
-              >
-                X
-              </button>
-            </div>
-            <div className="p-4 overflow-y-auto custom-scrollbar text-xs text-zinc-300 font-mono whitespace-pre-wrap">
-              {sectionModalLoading
-                ? "Loading section..."
-                : sectionModalError
-                ? sectionModalError
-                : sectionModalContent}
-            </div>
-          </div>
-        </div>
-      )}
 
       <TaskDiffModal
         open={Boolean(diffModalTask)}
