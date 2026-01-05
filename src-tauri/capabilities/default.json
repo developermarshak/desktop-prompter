@@ -17,6 +17,7 @@
     "allow-close-pty",
     "allow-get-git-diff",
     "allow-get-git-diff-stats",
+    "allow-get-git-branch",
     "allow-get-mcp-task-server-command",
     "allow-get-file-section",
     "allow-reset-task-git",

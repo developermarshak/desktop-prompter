@@ -177,11 +177,13 @@ export const TaskDiffModal = ({
                 </div>
               ) : (
                 <DiffEditor
-                  key={`${selectedFile.path}-${showChangedOnly}`}
                   theme="vs-dark"
                   language={language}
                   original={selectedFile.oldContent}
                   modified={selectedFile.newContent}
+                  originalModelPath={`${selectedFile.path}#original`}
+                  modifiedModelPath={`${selectedFile.path}#modified`}
+                  keepCurrentModel={true}
                   options={{
                     readOnly: true,
                     renderSideBySide: true,

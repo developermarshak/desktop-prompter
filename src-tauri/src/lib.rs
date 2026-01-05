@@ -136,6 +136,48 @@ fn is_binary_content(bytes: &[u8]) -> bool {
     bytes.iter().any(|byte| *byte == 0)
 }
 
+fn count_lines(bytes: &[u8]) -> usize {
+    if bytes.is_empty() {
+        return 0;
+    }
+    let mut count = bytes.iter().filter(|byte| **byte == b'\n').count();
+    if bytes.last() != Some(&b'\n') {
+        count += 1;
+    }
+    count
+}
+
+fn collect_files(path: &Path, files: &mut Vec<PathBuf>) {
+    if path.is_file() {
+        files.push(path.to_path_buf());
+        return;
+    }
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for entry in entries.flatten() {
+            collect_files(&entry.path(), files);
+        }
+    }
+}
+
+fn get_untracked_files(repo_path: &str, workdir: &Path) -> Result<Vec<PathBuf>, String> {
+    let output = run_git_command_output(
+        repo_path,
+        &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+    )?;
+    let mut files = Vec::new();
+    for entry in output.split('\0') {
+        if entry.starts_with("?? ") {
+            let rel_path = entry.trim_start_matches("?? ").trim();
+            if rel_path.is_empty() {
+                continue;
+            }
+            let full_path = workdir.join(rel_path);
+            collect_files(&full_path, &mut files);
+        }
+    }
+    Ok(files)
+}
+
 fn resolve_base_commit<'repo>(
     repo: &'repo Repository,
     base_branch: &str,
@@ -194,6 +236,26 @@ fn run_git_command(repo_path: &str, args: &[&str]) -> Result<(), String> {
         .map_err(|error| error.to_string())?;
     if output.status.success() {
         return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let message = if !stderr.is_empty() { stderr } else { stdout };
+    Err(if message.is_empty() {
+        "git command failed".to_string()
+    } else {
+        message
+    })
+}
+
+fn run_git_command_output(repo_path: &str, args: &[&str]) -> Result<String, String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .args(args)
+        .output()
+        .map_err(|error| error.to_string())?;
+    if output.status.success() {
+        return Ok(String::from_utf8_lossy(&output.stdout).to_string());
     }
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -460,27 +522,71 @@ fn get_git_diff(path: String) -> Result<GitDiffResponse, String> {
 
 #[tauri::command]
 fn get_git_diff_stats(path: String, base_branch: String) -> Result<GitDiffStatsResponse, String> {
-    let repo = Repository::discover(&path).map_err(|error| error.to_string())?;
-    let base_commit = resolve_base_commit(&repo, &base_branch)?;
-    let base_tree = base_commit.tree().map_err(|error| error.to_string())?;
+    let output = run_git_command_output(
+        &path,
+        &["diff", "--numstat", &base_branch],
+    )?;
 
-    let mut diff_opts = DiffOptions::new();
-    diff_opts
-        .include_untracked(true)
-        .recurse_untracked_dirs(true)
-        .include_typechange(true);
+    let mut added = 0usize;
+    let mut removed = 0usize;
+    let mut files_changed = 0usize;
 
-    let diff = repo
-        .diff_tree_to_workdir_with_index(Some(&base_tree), Some(&mut diff_opts))
-        .map_err(|error| error.to_string())?;
+    for line in output.lines() {
+        let mut parts = line.split('\t');
+        let added_part = parts.next().unwrap_or("");
+        let removed_part = parts.next().unwrap_or("");
+        let file_part = parts.next().unwrap_or("");
+        if file_part.is_empty() {
+            continue;
+        }
+        files_changed += 1;
+        if added_part == "-" || removed_part == "-" {
+            continue;
+        }
+        if let Ok(value) = added_part.parse::<usize>() {
+            added += value;
+        }
+        if let Ok(value) = removed_part.parse::<usize>() {
+            removed += value;
+        }
+    }
 
-    let stats = diff.stats().map_err(|error| error.to_string())?;
+    if let Ok(repo) = Repository::discover(&path) {
+        if let Some(workdir) = repo.workdir() {
+            if let Ok(untracked_files) = get_untracked_files(&path, workdir) {
+                for file_path in untracked_files {
+                    if let Ok(bytes) = std::fs::read(&file_path) {
+                        if is_binary_content(&bytes) {
+                            files_changed += 1;
+                            continue;
+                        }
+                        let line_count = count_lines(&bytes);
+                        if line_count > 0 {
+                            added += line_count;
+                        }
+                        files_changed += 1;
+                    }
+                }
+            }
+        }
+    }
 
     Ok(GitDiffStatsResponse {
-        added: stats.insertions() as usize,
-        removed: stats.deletions() as usize,
-        files_changed: stats.files_changed() as usize,
+        added,
+        removed,
+        files_changed,
     })
+}
+
+#[tauri::command]
+fn get_git_branch(path: String) -> Result<String, String> {
+    let repo = Repository::discover(&path).map_err(|error| error.to_string())?;
+    if let Ok(head) = repo.head() {
+        if let Some(name) = head.shorthand() {
+            return Ok(name.to_string());
+        }
+    }
+    Ok(String::new())
 }
 
 #[tauri::command]
@@ -849,6 +955,7 @@ pub fn run() {
             save_task_groups,
             get_git_diff,
             get_git_diff_stats,
+            get_git_branch,
             get_git_diff_base,
             get_file_section,
             reset_task_git,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import {
   Archive,
@@ -155,6 +155,8 @@ export const TaskGroupPanel = ({
   const [resettingTaskIds, setResettingTaskIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const lastDiffPollRef = useRef<Map<string, number>>(new Map());
+  const lastBranchPollRef = useRef<Map<string, number>>(new Map());
 
   const selectedTaskIds = useMemo(
     () => group.tasks.filter((task) => task.selected).map((task) => task.id),
@@ -337,18 +339,20 @@ export const TaskGroupPanel = ({
       if (!isTauri()) {
         return;
       }
-      if (!task.worktreePath?.trim()) {
+      const repoPath = group.runInWorktree
+        ? task.worktreePath?.trim()
+        : group.projectPath?.trim();
+      if (!repoPath) {
         return;
       }
-      const repoPath = task.worktreePath;
       if (!group.baseBranch.trim()) {
         return;
       }
-    try {
-      const response = await invoke<DiffStatsResponse>("get_git_diff_stats", {
-        path: repoPath,
-        baseBranch: group.baseBranch.trim(),
-      });
+      try {
+        const response = await invoke<DiffStatsResponse>("get_git_diff_stats", {
+          path: repoPath,
+          baseBranch: group.baseBranch.trim(),
+        });
         onUpdateTask(group.id, task.id, {
           diffStats: {
             added: response.added,
@@ -373,6 +377,38 @@ export const TaskGroupPanel = ({
     [group.baseBranch, group.id, group.projectPath, group.runInWorktree, onUpdateTask],
   );
 
+  const refreshTaskBranch = useCallback(
+    async (task: Task) => {
+      if (!isTauri()) {
+        return;
+      }
+      const repoPath = task.worktreePath?.trim();
+      if (!repoPath) {
+        return;
+      }
+      try {
+        const branchName = await invoke<string>("get_git_branch", { path: repoPath });
+        const nextBranch = branchName.trim();
+        if (nextBranch !== task.gitBranch) {
+          onUpdateTask(group.id, task.id, { gitBranch: nextBranch });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (
+          message.includes("No such file or directory") ||
+          message.includes("NotFound")
+        ) {
+          if (task.gitBranch) {
+            onUpdateTask(group.id, task.id, { gitBranch: "" });
+          }
+          return;
+        }
+        console.error("Failed to load git branch", error);
+      }
+    },
+    [group.id, onUpdateTask],
+  );
+
   const refreshAllDiffStats = useCallback(async () => {
     await Promise.all(group.tasks.map((task) => refreshDiffStats(task)));
   }, [group.tasks, refreshDiffStats]);
@@ -392,6 +428,61 @@ export const TaskGroupPanel = ({
     }
     void Promise.all(tasksNeedingStats.map((task) => refreshDiffStats(task)));
   }, [group.baseBranch, group.projectPath, group.tasks, refreshDiffStats]);
+
+  useEffect(() => {
+    if (!isTauri()) {
+      return;
+    }
+    const tasksWithWorktree = group.tasks.filter((task) =>
+      Boolean(task.worktreePath?.trim()),
+    );
+    if (tasksWithWorktree.length === 0) {
+      return;
+    }
+    const diffPollIntervalMs = 20000;
+    const branchPollIntervalMs = 15000;
+    const shouldPoll = (
+      ref: React.MutableRefObject<Map<string, number>>,
+      taskId: string,
+      interval: number,
+      now: number,
+    ) => {
+      const last = ref.current.get(taskId) ?? 0;
+      if (now - last < interval) {
+        return false;
+      }
+      ref.current.set(taskId, now);
+      return true;
+    };
+    const refreshGitState = async () => {
+      if (document.hidden) {
+        return;
+      }
+      const now = Date.now();
+      await Promise.all(
+        tasksWithWorktree.map(async (task) => {
+          const promises: Promise<void>[] = [];
+          if (
+            group.baseBranch.trim() &&
+            shouldPoll(lastDiffPollRef, task.id, diffPollIntervalMs, now)
+          ) {
+            promises.push(refreshDiffStats(task));
+          }
+          if (shouldPoll(lastBranchPollRef, task.id, branchPollIntervalMs, now)) {
+            promises.push(refreshTaskBranch(task));
+          }
+          if (promises.length > 0) {
+            await Promise.all(promises);
+          }
+        }),
+      );
+    };
+    void refreshGitState();
+    const interval = window.setInterval(() => {
+      void refreshGitState();
+    }, 15000);
+    return () => window.clearInterval(interval);
+  }, [group.baseBranch, group.tasks, refreshDiffStats, refreshTaskBranch]);
 
   const openSectionPreview = useCallback(
     async (task: Task) => {
@@ -859,16 +950,15 @@ export const TaskGroupPanel = ({
             group.tasks.map((task) => {
               const isExpanded = expandedTaskId === task.id;
               const diffStats = task.diffStats;
-              const hasWorktree = Boolean(task.worktreePath?.trim());
               const diffLabel = diffStats
                 ? `+${diffStats.added} -${diffStats.removed}`
                 : "--";
               const hasDiff =
                 diffStats && (diffStats.added > 0 || diffStats.removed > 0);
-              const showDiffStats = hasWorktree && Boolean(diffStats);
               const diffPanelPath = group.runInWorktree
                 ? task.worktreePath?.trim()
                 : group.projectPath?.trim();
+              const showDiffStats = Boolean(diffPanelPath) && Boolean(diffStats);
               const canOpenDiffPanel = Boolean(diffPanelPath);
               return (
                 <div

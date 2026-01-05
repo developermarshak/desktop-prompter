@@ -407,11 +407,13 @@ export const GitDiffPanel = ({ sessionPath, onClose }: GitDiffPanelProps) => {
               </div>
             ) : (
               <DiffEditor
-                key={`${selectedFile?.path ?? "diff"}-${showChangedOnly}`}
                 original={selectedFile?.oldContent ?? ""}
                 modified={selectedFile?.newContent ?? ""}
                 language={language}
                 theme="vs-dark"
+                originalModelPath={`${selectedFile?.path ?? "diff"}#original`}
+                modifiedModelPath={`${selectedFile?.path ?? "diff"}#modified`}
+                keepCurrentModel={true}
                 options={{
                   renderSideBySide: false,
                   readOnly: true,
