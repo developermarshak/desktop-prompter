@@ -246,6 +246,7 @@ const App: React.FC = () => {
         onCreateTask={taskGroupsManager.createTask}
         onUpdateTask={taskGroupsManager.updateTask}
         onDeleteTasks={taskGroupsManager.deleteTasks}
+        onResetTasks={taskGroupsManager.resetTasks}
         onSetTasksStatus={taskGroupsManager.setTasksStatus}
         onSetTasksSelected={taskGroupsManager.setTasksSelected}
         onClearSelection={taskGroupsManager.clearTaskSelection}

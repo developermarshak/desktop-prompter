@@ -19,3 +19,8 @@ commands.allow = ["save_task_groups"]
 identifier = "allow-get-file-section"
 description = "Allow loading a file section for a task."
 commands.allow = ["get_file_section"]
+
+[[permission]]
+identifier = "allow-reset-task-git"
+description = "Allow resetting task worktrees and branches."
+commands.allow = ["reset_task_git"]

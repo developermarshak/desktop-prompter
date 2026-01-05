@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronUp,
   RefreshCw,
+  RotateCcw,
   FolderOpen,
   GitBranch,
   Play,
@@ -59,6 +60,7 @@ interface TaskGroupPanelProps {
   onCreateTask: (groupId: string) => void;
   onUpdateTask: (groupId: string, taskId: string, patch: Partial<Task>) => void;
   onDeleteTasks: (groupId: string, taskIds: string[]) => void;
+  onResetTasks: (groupId: string, taskIds: string[]) => void;
   onSetTasksStatus: (groupId: string, taskIds: string[], status: TaskStatus) => void;
   onSetTasksSelected: (
     groupId: string,
@@ -127,6 +129,7 @@ export const TaskGroupPanel = ({
   onCreateTask,
   onUpdateTask,
   onDeleteTasks,
+  onResetTasks,
   onSetTasksStatus,
   onSetTasksSelected,
   onClearSelection,
@@ -149,6 +152,9 @@ export const TaskGroupPanel = ({
   const [diffModalResponse, setDiffModalResponse] = useState<GitDiffResponse | null>(null);
   const [diffModalLoading, setDiffModalLoading] = useState(false);
   const [diffModalError, setDiffModalError] = useState<string | null>(null);
+  const [resettingTaskIds, setResettingTaskIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   const selectedTaskIds = useMemo(
     () => group.tasks.filter((task) => task.selected).map((task) => task.id),
@@ -157,6 +163,23 @@ export const TaskGroupPanel = ({
 
   const allSelected =
     group.tasks.length > 0 && selectedTaskIds.length === group.tasks.length;
+  const isResettingSelected = selectedTaskIds.some((taskId) =>
+    resettingTaskIds.has(taskId),
+  );
+
+  const setResettingTasks = useCallback((taskIds: string[], resetting: boolean) => {
+    setResettingTaskIds((prev) => {
+      const next = new Set(prev);
+      for (const taskId of taskIds) {
+        if (resetting) {
+          next.add(taskId);
+        } else {
+          next.delete(taskId);
+        }
+      }
+      return next;
+    });
+  }, []);
 
   const loadSectionContent = useCallback(
     async (task: Task, options?: { surfaceErrors?: boolean }) => {
@@ -321,11 +344,11 @@ export const TaskGroupPanel = ({
       if (!group.baseBranch.trim()) {
         return;
       }
-      try {
-        const response = await invoke<DiffStatsResponse>("get_git_diff_stats", {
-          path: repoPath,
-          baseBranch: group.baseBranch.trim(),
-        });
+    try {
+      const response = await invoke<DiffStatsResponse>("get_git_diff_stats", {
+        path: repoPath,
+        baseBranch: group.baseBranch.trim(),
+      });
         onUpdateTask(group.id, task.id, {
           diffStats: {
             added: response.added,
@@ -335,6 +358,15 @@ export const TaskGroupPanel = ({
           },
         });
       } catch (error) {
+        const message =
+          error instanceof Error ? error.message : String(error);
+        if (
+          message.includes("No such file or directory") ||
+          message.includes("NotFound")
+        ) {
+          onUpdateTask(group.id, task.id, { diffStats: null });
+          return;
+        }
         console.error("Failed to load diff stats", error);
       }
     },
@@ -571,6 +603,75 @@ export const TaskGroupPanel = ({
     onDeleteTasks(group.id, selectedTaskIds);
   }, [group.id, onDeleteTasks, selectedTaskIds]);
 
+  const resetTaskState = useCallback(
+    (taskIds: string[]) => {
+      if (taskIds.length === 0) {
+        return;
+      }
+      onResetTasks(group.id, taskIds);
+    },
+    [group.id, onResetTasks],
+  );
+
+  const runResetTaskGit = useCallback(
+    async (task: Task) => {
+      if (!isTauri()) {
+        return;
+      }
+      const worktreePath = task.worktreePath.trim();
+      const branchName = task.gitBranch.trim();
+      if (!worktreePath && !branchName) {
+        return;
+      }
+      const repoPath = group.projectPath.trim() || worktreePath;
+      if (!repoPath) {
+        throw new Error("Missing repository path.");
+      }
+      await invoke("reset_task_git", {
+        repoPath,
+        worktreePath: worktreePath || null,
+        branchName: branchName || null,
+      });
+    },
+    [group.projectPath],
+  );
+
+  const handleResetTask = useCallback(
+    async (task: Task) => {
+      setResettingTasks([task.id], true);
+      try {
+        await runResetTaskGit(task);
+        resetTaskState([task.id]);
+      } catch (error) {
+        console.error("Failed to reset task", error);
+        alert("Failed to reset the task worktree/branch.");
+      } finally {
+        setResettingTasks([task.id], false);
+      }
+    },
+    [resetTaskState, runResetTaskGit, setResettingTasks],
+  );
+
+  const handleResetSelected = useCallback(async () => {
+    if (selectedTaskIds.length === 0) {
+      return;
+    }
+    setResettingTasks(selectedTaskIds, true);
+    try {
+      await Promise.all(
+        group.tasks
+          .filter((task) => task.selected)
+          .map((task) => runResetTaskGit(task)),
+      );
+      resetTaskState(selectedTaskIds);
+    } catch (error) {
+      console.error("Failed to reset selected tasks", error);
+      alert("Failed to reset one or more task worktrees/branches.");
+    } finally {
+      setResettingTasks(selectedTaskIds, false);
+    }
+  }, [group.tasks, resetTaskState, runResetTaskGit, selectedTaskIds, setResettingTasks]);
+
   return (
     <div className="flex flex-col h-full bg-zinc-900">
       <div className="h-16 flex items-center justify-between px-4 border-b border-zinc-800 bg-zinc-900 shrink-0">
@@ -728,6 +829,16 @@ export const TaskGroupPanel = ({
         >
           <Trash2 className="w-3.5 h-3.5" />
           Delete
+        </button>
+        <button
+          onClick={handleResetSelected}
+          disabled={selectedTaskIds.length === 0 || isResettingSelected}
+          className="flex items-center gap-1 text-xs text-sky-300 hover:text-white disabled:text-zinc-600"
+        >
+          <RotateCcw
+            className={`w-3.5 h-3.5 ${isResettingSelected ? "animate-spin" : ""}`}
+          />
+          {isResettingSelected ? "Resetting..." : "Reset"}
         </button>
         <div className="h-4 w-px bg-zinc-800" />
         <button
@@ -996,6 +1107,18 @@ export const TaskGroupPanel = ({
                           className="flex items-center gap-1 text-xs text-zinc-300 hover:text-white"
                         >
                           Refresh diff
+                        </button>
+                        <button
+                          onClick={() => handleResetTask(task)}
+                          disabled={resettingTaskIds.has(task.id)}
+                          className="flex items-center gap-1 text-xs text-sky-300 hover:text-white disabled:text-zinc-600"
+                        >
+                          <RotateCcw
+                            className={`w-3.5 h-3.5 ${
+                              resettingTaskIds.has(task.id) ? "animate-spin" : ""
+                            }`}
+                          />
+                          {resettingTaskIds.has(task.id) ? "Resetting..." : "Reset"}
                         </button>
                       </div>
                     </div>

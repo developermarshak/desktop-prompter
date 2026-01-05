@@ -19,6 +19,7 @@
     "allow-get-git-diff-stats",
     "allow-get-mcp-task-server-command",
     "allow-get-file-section",
+    "allow-reset-task-git",
     "allow-load-task-groups",
     "allow-save-task-groups",
     "shell:allow-open",

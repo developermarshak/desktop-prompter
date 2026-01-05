@@ -44,6 +44,7 @@ export interface UseTaskGroupsManagerResult {
   createTask: (groupId: string) => void;
   updateTask: (groupId: string, taskId: string, patch: Partial<Task>) => void;
   deleteTasks: (groupId: string, taskIds: string[]) => void;
+  resetTasks: (groupId: string, taskIds: string[]) => void;
   setTasksStatus: (
     groupId: string,
     taskIds: string[],
@@ -276,6 +277,32 @@ export const useTaskGroupsManager = (): UseTaskGroupsManagerResult => {
     );
   }, []);
 
+  const resetTasks = useCallback((groupId: string, taskIds: string[]) => {
+    const taskIdSet = new Set(taskIds);
+    setTaskGroups((prev) =>
+      prev.map((group) =>
+        group.id === groupId
+          ? {
+              ...group,
+              tasks: group.tasks.map((task) =>
+                taskIdSet.has(task.id)
+                  ? {
+                      ...task,
+                      gitBranch: "",
+                      worktreePath: "",
+                      diffStats: null,
+                      status: "ready",
+                      selected: false,
+                      sessionTabId: null,
+                    }
+                  : task,
+              ),
+            }
+          : group,
+      ),
+    );
+  }, []);
+
   const setTasksStatus = useCallback(
     (groupId: string, taskIds: string[], status: TaskStatus) => {
       const taskIdSet = new Set(taskIds);
@@ -341,6 +368,7 @@ export const useTaskGroupsManager = (): UseTaskGroupsManagerResult => {
     createTask,
     updateTask,
     deleteTasks,
+    resetTasks,
     setTasksStatus,
     setTasksSelected,
     clearTaskSelection,

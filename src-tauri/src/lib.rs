@@ -1,4 +1,4 @@
-use git2::{Delta, DiffOptions, Oid, Repository};
+use git2::{Delta, DiffOptions, ErrorCode, Oid, Repository};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use serde::Serialize;
 use std::{
@@ -183,6 +183,26 @@ fn resolve_prompter_store_path(app: &tauri::AppHandle) -> Result<PathBuf, String
         .home_dir()
         .map_err(|error| error.to_string())?;
     Ok(home_dir.join(".prompter").join("task-groups.json"))
+}
+
+fn run_git_command(repo_path: &str, args: &[&str]) -> Result<(), String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .args(args)
+        .output()
+        .map_err(|error| error.to_string())?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let message = if !stderr.is_empty() { stderr } else { stdout };
+    Err(if message.is_empty() {
+        "git command failed".to_string()
+    } else {
+        message
+    })
 }
 
 fn mcp_binary_name() -> &'static str {
@@ -578,6 +598,45 @@ fn get_file_section(
 }
 
 #[tauri::command]
+fn reset_task_git(
+    repo_path: String,
+    worktree_path: Option<String>,
+    branch_name: Option<String>,
+) -> Result<(), String> {
+    let repo = Repository::discover(&repo_path).map_err(|error| error.to_string())?;
+
+    if let Some(worktree_path) = worktree_path {
+        let trimmed = worktree_path.trim();
+        if !trimmed.is_empty() && Path::new(trimmed).exists() {
+            run_git_command(&repo_path, &["worktree", "remove", "--force", trimmed])?;
+        }
+    }
+
+    if let Some(branch_name) = branch_name {
+        let trimmed = branch_name.trim();
+        if !trimmed.is_empty() {
+            let reference_name = if trimmed.starts_with("refs/") {
+                trimmed.to_string()
+            } else {
+                format!("refs/heads/{}", trimmed)
+            };
+            match repo.find_reference(&reference_name) {
+                Ok(mut reference) => {
+                    reference.delete().map_err(|error| error.to_string())?;
+                }
+                Err(error) => {
+                    if error.code() != ErrorCode::NotFound {
+                        return Err(error.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 fn spawn_pty(
     id: String,
     cols: u16,
@@ -792,6 +851,7 @@ pub fn run() {
             get_git_diff_stats,
             get_git_diff_base,
             get_file_section,
+            reset_task_git,
             create_panel_window,
             close_panel_window
         ])
