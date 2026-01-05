@@ -1,7 +1,21 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { DiffEditor } from "@monaco-editor/react";
-import { RefreshCw, X, GitCompare, AlertTriangle } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  FolderTree,
+  GitCompare,
+  List,
+  RefreshCw,
+  X,
+} from "lucide-react";
+import {
+  Group,
+  Panel as ResizablePanel,
+  Separator,
+} from "react-resizable-panels";
 import type { GitDiffFile, GitDiffResponse } from "../types/git";
 
 interface GitDiffPanelProps {
@@ -60,12 +74,99 @@ const getLanguageFromPath = (path: string) => {
   }
 };
 
+type FileTreeNode = {
+  name: string;
+  path: string;
+  type: "dir" | "file";
+  children?: FileTreeNode[];
+  file?: GitDiffFile;
+};
+
+const buildFileTree = (files: GitDiffFile[]) => {
+  const root: FileTreeNode = {
+    name: "",
+    path: "",
+    type: "dir",
+    children: [],
+  };
+  const dirMap = new Map<string, FileTreeNode>();
+  dirMap.set("", root);
+
+  const sortedFiles = [...files].sort((a, b) => a.path.localeCompare(b.path));
+  for (const file of sortedFiles) {
+    const parts = file.path.split("/").filter(Boolean);
+    let currentPath = "";
+    let currentNode = root;
+    parts.forEach((part, index) => {
+      const isFile = index === parts.length - 1;
+      currentPath = currentPath ? `${currentPath}/${part}` : part;
+      if (isFile) {
+        currentNode.children?.push({
+          name: part,
+          path: currentPath,
+          type: "file",
+          file,
+        });
+        return;
+      }
+      let nextNode = dirMap.get(currentPath);
+      if (!nextNode) {
+        nextNode = {
+          name: part,
+          path: currentPath,
+          type: "dir",
+          children: [],
+        };
+        dirMap.set(currentPath, nextNode);
+        currentNode.children?.push(nextNode);
+      }
+      currentNode = nextNode;
+    });
+  }
+
+  const sortNodes = (nodes: FileTreeNode[]) => {
+    nodes.sort((a, b) => {
+      if (a.type !== b.type) {
+        return a.type === "dir" ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name);
+    });
+    nodes.forEach((node) => {
+      if (node.children) {
+        sortNodes(node.children);
+      }
+    });
+  };
+
+  sortNodes(root.children ?? []);
+  return root.children ?? [];
+};
+
+const collectDirectoryPaths = (nodes: FileTreeNode[]) => {
+  const paths: string[] = [];
+  const walk = (items: FileTreeNode[]) => {
+    items.forEach((node) => {
+      if (node.type === "dir") {
+        paths.push(node.path);
+        if (node.children) {
+          walk(node.children);
+        }
+      }
+    });
+  };
+  walk(nodes);
+  return paths;
+};
+
 export const GitDiffPanel = ({ sessionPath, onClose }: GitDiffPanelProps) => {
   const [files, setFiles] = useState<GitDiffFile[]>([]);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [repoRoot, setRepoRoot] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showChangedOnly, setShowChangedOnly] = useState(true);
+  const [fileViewMode, setFileViewMode] = useState<"list" | "tree">("list");
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
 
   const loadDiff = useCallback(async () => {
     if (!sessionPath || !isTauri()) {
@@ -121,6 +222,97 @@ export const GitDiffPanel = ({ sessionPath, onClose }: GitDiffPanelProps) => {
     return getLanguageFromPath(selectedFile.path);
   }, [selectedFile]);
 
+  const fileTree = useMemo(() => buildFileTree(files), [files]);
+
+  useEffect(() => {
+    if (fileTree.length === 0) {
+      setExpandedDirs(new Set());
+      return;
+    }
+    setExpandedDirs(new Set(collectDirectoryPaths(fileTree)));
+  }, [fileTree]);
+
+  const toggleDir = useCallback((path: string) => {
+    setExpandedDirs((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  }, []);
+
+  const renderFileRow = (
+    file: GitDiffFile,
+    options?: { depth?: number; useBaseName?: boolean },
+  ) => {
+    const meta = statusMeta[file.status] ?? {
+      label: file.status,
+      badge: "?",
+      className: "text-zinc-400",
+    };
+    const isActive = file.path === selectedPath;
+    const label = options?.useBaseName
+      ? file.path.split("/").pop() ?? file.path
+      : file.path;
+    const paddingLeft = options?.depth ? options.depth * 12 + 12 : undefined;
+
+    return (
+      <button
+        key={file.path}
+        onClick={() => setSelectedPath(file.path)}
+        className={`w-full px-3 py-2 text-left text-xs transition-colors border-b border-zinc-900/60 ${
+          isActive
+            ? "bg-zinc-800 text-zinc-100"
+            : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200"
+        }`}
+        style={paddingLeft ? { paddingLeft } : undefined}
+        title={`${meta.label} ${file.path}`}
+      >
+        <div className="flex items-center gap-2">
+          <span className={`font-mono ${meta.className}`}>{meta.badge}</span>
+          <span className="truncate">{label}</span>
+        </div>
+      </button>
+    );
+  };
+
+  const renderTreeNodes = (nodes: FileTreeNode[], depth: number) =>
+    nodes.map((node) => {
+      if (node.type === "dir") {
+        const isExpanded = expandedDirs.has(node.path);
+        const paddingLeft = depth * 12 + 8;
+        return (
+          <div key={node.path}>
+            <button
+              onClick={() => toggleDir(node.path)}
+              className="w-full px-3 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-800/60 transition-colors"
+              style={{ paddingLeft }}
+              title={node.path}
+            >
+              <div className="flex items-center gap-2">
+                {isExpanded ? (
+                  <ChevronDown className="h-3 w-3 text-zinc-500" />
+                ) : (
+                  <ChevronRight className="h-3 w-3 text-zinc-500" />
+                )}
+                <span className="truncate">{node.name}</span>
+              </div>
+            </button>
+            {isExpanded && node.children
+              ? renderTreeNodes(node.children, depth + 1)
+              : null}
+          </div>
+        );
+      }
+      if (!node.file) {
+        return null;
+      }
+      return renderFileRow(node.file, { depth, useBaseName: true });
+    });
+
   const renderContent = () => {
     if (!isTauri()) {
       return (
@@ -160,67 +352,89 @@ export const GitDiffPanel = ({ sessionPath, onClose }: GitDiffPanelProps) => {
     }
 
     return (
-      <>
-        <div className="w-52 border-r border-zinc-800 bg-zinc-950/40 flex flex-col">
-          <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-zinc-500 border-b border-zinc-800">
-            Changed files
-          </div>
-          <div className="flex-1 overflow-y-auto custom-scrollbar">
-            {files.map((file) => {
-              const meta = statusMeta[file.status] ?? {
-                label: file.status,
-                badge: "?",
-                className: "text-zinc-400",
-              };
-              const isActive = file.path === selectedPath;
-              return (
+      <Group
+        orientation="horizontal"
+        id="git-diff-layout"
+        className="flex-1 min-h-0"
+      >
+        <ResizablePanel
+          id="git-diff-files"
+          defaultSize="25%"
+          minSize="15%"
+          maxSize="45%"
+        >
+          <div className="h-full border-r border-zinc-800 bg-zinc-950/40 flex flex-col">
+            <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-zinc-500 border-b border-zinc-800 flex items-center justify-between">
+              <span>Changed files</span>
+              <div className="flex items-center gap-1">
                 <button
-                  key={file.path}
-                  onClick={() => setSelectedPath(file.path)}
-                  className={`w-full px-3 py-2 text-left text-xs transition-colors border-b border-zinc-900/60 ${
-                    isActive
-                      ? "bg-zinc-800 text-zinc-100"
-                      : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200"
+                  onClick={() => setFileViewMode("list")}
+                  className={`p-1 rounded-md transition-colors ${
+                    fileViewMode === "list"
+                      ? "bg-zinc-800 text-zinc-200"
+                      : "text-zinc-500 hover:text-zinc-300"
                   }`}
-                  title={`${meta.label} ${file.path}`}
+                  title="List view"
                 >
-                  <div className="flex items-center gap-2">
-                    <span className={`font-mono ${meta.className}`}>
-                      {meta.badge}
-                    </span>
-                    <span className="truncate">{file.path}</span>
-                  </div>
+                  <List className="h-3 w-3" />
                 </button>
-              );
-            })}
-          </div>
-        </div>
-        <div className="flex-1 min-w-0">
-          {selectedFile?.isBinary ? (
-            <div className="flex h-full items-center justify-center text-sm text-zinc-500">
-              Binary file diff is not available.
+                <button
+                  onClick={() => setFileViewMode("tree")}
+                  className={`p-1 rounded-md transition-colors ${
+                    fileViewMode === "tree"
+                      ? "bg-zinc-800 text-zinc-200"
+                      : "text-zinc-500 hover:text-zinc-300"
+                  }`}
+                  title="Tree view"
+                >
+                  <FolderTree className="h-3 w-3" />
+                </button>
+              </div>
             </div>
-          ) : (
-            <DiffEditor
-              original={selectedFile?.oldContent ?? ""}
-              modified={selectedFile?.newContent ?? ""}
-              language={language}
-              theme="vs-dark"
-              options={{
-                renderSideBySide: false,
-                readOnly: true,
-                minimap: { enabled: false },
-                automaticLayout: true,
-                scrollBeyondLastLine: false,
-                wordWrap: "on",
-                fontSize: 12,
-                fontFamily:
-                  "'JetBrains Mono', 'SFMono-Regular', ui-monospace, monospace",
-              }}
-            />
-          )}
-        </div>
-      </>
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              {fileViewMode === "tree"
+                ? renderTreeNodes(fileTree, 0)
+                : files.map((file) => renderFileRow(file))}
+            </div>
+          </div>
+        </ResizablePanel>
+        <Separator className="w-1 bg-zinc-800 hover:bg-indigo-500 transition-colors cursor-col-resize" />
+        <ResizablePanel id="git-diff-viewer" minSize="45%">
+          <div className="flex-1 min-w-0 h-full">
+            {selectedFile?.isBinary ? (
+              <div className="flex h-full items-center justify-center text-sm text-zinc-500">
+                Binary file diff is not available.
+              </div>
+            ) : (
+              <DiffEditor
+                key={`${selectedFile?.path ?? "diff"}-${showChangedOnly}`}
+                original={selectedFile?.oldContent ?? ""}
+                modified={selectedFile?.newContent ?? ""}
+                language={language}
+                theme="vs-dark"
+                options={{
+                  renderSideBySide: false,
+                  readOnly: true,
+                  minimap: { enabled: false },
+                  automaticLayout: true,
+                  scrollBeyondLastLine: false,
+                  wordWrap: "on",
+                  fontSize: 12,
+                  fontFamily:
+                    "'JetBrains Mono', 'SFMono-Regular', ui-monospace, monospace",
+                  hideUnchangedRegions: showChangedOnly
+                    ? {
+                        enabled: true,
+                        contextLineCount: 3,
+                        minimumLineCount: 3,
+                      }
+                    : { enabled: false },
+                }}
+              />
+            )}
+          </div>
+        </ResizablePanel>
+      </Group>
     );
   };
 
@@ -237,6 +451,15 @@ export const GitDiffPanel = ({ sessionPath, onClose }: GitDiffPanelProps) => {
               {repoRoot}
             </span>
           )}
+          <label className="flex items-center gap-2 text-[10px] text-zinc-400">
+            <input
+              type="checkbox"
+              checked={showChangedOnly}
+              onChange={(event) => setShowChangedOnly(event.target.checked)}
+              className="w-3 h-3 rounded border-zinc-600 bg-zinc-950 text-indigo-500 focus:ring-indigo-500/50 focus:ring-offset-0"
+            />
+            Only changed lines
+          </label>
           <button
             onClick={loadDiff}
             disabled={!sessionPath || loading || !isTauri()}

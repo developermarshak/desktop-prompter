@@ -33,6 +33,8 @@ const App: React.FC = () => {
   const [indicationLogsOpen, setIndicationLogsOpen] = useState(false);
   const [activeView, setActiveView] = useState<"editor" | "settings">("editor");
   const [diffOpen, setDiffOpen] = useState(false);
+  const [diffSessionPath, setDiffSessionPath] = useState<string | null>(null);
+  const [diffSource, setDiffSource] = useState<"session" | "task" | null>(null);
 
   // Custom hooks
   const terminalManager = useTerminalManager();
@@ -147,6 +149,37 @@ const App: React.FC = () => {
     }
   };
 
+  const handleToggleDiffPanel = () => {
+    if (!diffAvailable) {
+      return;
+    }
+    if (diffOpen && diffSource === "session") {
+      setDiffOpen(false);
+      setDiffSource(null);
+      return;
+    }
+    setDiffSessionPath(activeTerminalSessionPath ?? null);
+    setDiffSource("session");
+    setDiffOpen(true);
+  };
+
+  const handleOpenTaskDiffPanel = (path: string) => {
+    const trimmed = path.trim();
+    if (!trimmed) {
+      return;
+    }
+    setDiffSessionPath(trimmed);
+    setDiffSource("task");
+    setDiffOpen(true);
+  };
+
+  useEffect(() => {
+    if (diffSource !== "session" || !diffOpen) {
+      return;
+    }
+    setDiffSessionPath(activeTerminalSessionPath ?? null);
+  }, [activeTerminalSessionPath, diffOpen, diffSource]);
+
   const promptEditorContent = (
     <PromptEditor
       value={activeTaskGroup ? activeTaskGroup.prompt : promptsManager.promptContent}
@@ -219,6 +252,7 @@ const App: React.FC = () => {
         onRequestTerminal={terminalManager.createTerminalTab}
         onSaveTerminalSessionPath={terminalManager.setTerminalSessionPath}
         onOpenSession={openTaskSession}
+        onOpenDiffPanel={handleOpenTaskDiffPanel}
       />
     ) : (
       promptEditorContent
@@ -231,12 +265,7 @@ const App: React.FC = () => {
         onTerminalOutput={terminalManager.handleTerminalOutput}
         onPopOut={handleDetachTerminal}
         onToggleLogs={() => setIndicationLogsOpen((prev) => !prev)}
-        onToggleDiff={() => {
-          if (!diffAvailable) {
-            return;
-          }
-          setDiffOpen((prev) => !prev);
-        }}
+        onToggleDiff={handleToggleDiffPanel}
         logsOpen={indicationLogsOpen}
         diffOpen={diffOpen}
         diffAvailable={diffAvailable}
@@ -390,8 +419,11 @@ const App: React.FC = () => {
               <div className="h-full bg-zinc-900 border-l border-zinc-800">
                 {diffOpen ? (
                   <GitDiffPanel
-                    sessionPath={activeTerminalSessionPath}
-                    onClose={() => setDiffOpen(false)}
+                    sessionPath={diffSessionPath}
+                    onClose={() => {
+                      setDiffOpen(false);
+                      setDiffSource(null);
+                    }}
                   />
                 ) : chatManager.chatOpen ? (
                   <ChatAssistant

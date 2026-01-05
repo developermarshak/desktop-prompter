@@ -69,6 +69,7 @@ interface TaskGroupPanelProps {
   onRequestTerminal: (title?: string, type?: "terminal" | "claude") => string | null;
   onSaveTerminalSessionPath?: (tabId: string, path: string) => void;
   onOpenSession: (tabId: string) => void;
+  onOpenDiffPanel: (path: string) => void;
   onSetSectionPreview: (preview: TaskSectionPreview | null) => void;
 }
 
@@ -116,19 +117,6 @@ const buildWorktreeCommand = (
   return { worktreePath, command };
 };
 
-const mergeUnique = (base: string[], additions: string[]) => {
-  const seen = new Set(base);
-  const next = [...base];
-  for (const value of additions) {
-    if (seen.has(value)) {
-      continue;
-    }
-    seen.add(value);
-    next.push(value);
-  }
-  return next;
-};
-
 export const TaskGroupPanel = ({
   group,
   templates,
@@ -145,6 +133,7 @@ export const TaskGroupPanel = ({
   onRequestTerminal,
   onSaveTerminalSessionPath,
   onOpenSession,
+  onOpenDiffPanel,
   onSetSectionPreview,
 }: TaskGroupPanelProps) => {
   const codexMcpSessionSettings = useMemo(
@@ -376,7 +365,6 @@ export const TaskGroupPanel = ({
     async (task: Task) => {
       const label = formatSectionLabel(task);
       const lineStart = task.section?.lineStart ?? 1;
-      const lineEnd = task.section?.lineEnd ?? lineStart;
       const filePath = task.section?.filePath ?? "";
       onSetSectionPreview({
         title: task.name,
@@ -767,6 +755,10 @@ export const TaskGroupPanel = ({
               const hasDiff =
                 diffStats && (diffStats.added > 0 || diffStats.removed > 0);
               const showDiffStats = hasWorktree && Boolean(diffStats);
+              const diffPanelPath = group.runInWorktree
+                ? task.worktreePath?.trim()
+                : group.projectPath?.trim();
+              const canOpenDiffPanel = Boolean(diffPanelPath);
               return (
                 <div
                   key={task.id}
@@ -829,23 +821,45 @@ export const TaskGroupPanel = ({
                           ? "Show section"
                           : "No section set"
                       }
-                      className="text-zinc-400 hover:text-white disabled:text-zinc-600"
+                      className="text-zinc-400 hover:text-white disabled:text-zinc-600 underline underline-offset-2 decoration-dotted decoration-zinc-600 hover:decoration-zinc-300 cursor-pointer disabled:cursor-not-allowed"
                     >
                       {formatSectionLabel(task)}
                     </button>
                     {showDiffStats && (
                       <>
                         <span className="text-zinc-600">|</span>
-                        <span className="font-mono">{diffLabel}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (diffPanelPath) {
+                              onOpenDiffPanel(diffPanelPath);
+                            }
+                          }}
+                          disabled={!canOpenDiffPanel}
+                          className="font-mono text-zinc-400 hover:text-white disabled:text-zinc-600 underline underline-offset-2 decoration-dotted decoration-zinc-600 hover:decoration-zinc-300 cursor-pointer disabled:cursor-not-allowed"
+                          title="Show git diff"
+                        >
+                          {diffLabel}
+                        </button>
                       </>
                     )}
                     {task.gitBranch && (
                       <>
                         <span className="text-zinc-600">|</span>
-                        <span className="inline-flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (diffPanelPath) {
+                              onOpenDiffPanel(diffPanelPath);
+                            }
+                          }}
+                          disabled={!canOpenDiffPanel}
+                          className="inline-flex items-center gap-1 text-zinc-400 hover:text-white disabled:text-zinc-600 underline underline-offset-2 decoration-dotted decoration-zinc-600 hover:decoration-zinc-300 cursor-pointer disabled:cursor-not-allowed"
+                          title="Show git diff"
+                        >
                           <GitBranch className="w-3 h-3" />
                           {task.gitBranch}
-                        </span>
+                        </button>
                       </>
                     )}
                   </div>

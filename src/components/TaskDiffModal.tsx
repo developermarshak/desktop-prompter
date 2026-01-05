@@ -72,6 +72,7 @@ export const TaskDiffModal = ({
   onClose,
 }: TaskDiffModalProps) => {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [showChangedOnly, setShowChangedOnly] = useState(true);
 
   const files = diff?.files ?? [];
   const selectedFile = useMemo(
@@ -98,12 +99,23 @@ export const TaskDiffModal = ({
             <GitCompare className="h-4 w-4 text-indigo-400" />
             <span>{title}</span>
           </div>
-          <button
-            onClick={onClose}
-            className="text-zinc-500 hover:text-white transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-[10px] text-zinc-400">
+              <input
+                type="checkbox"
+                checked={showChangedOnly}
+                onChange={(event) => setShowChangedOnly(event.target.checked)}
+                className="w-3 h-3 rounded border-zinc-600 bg-zinc-950 text-indigo-500 focus:ring-indigo-500/50 focus:ring-offset-0"
+              />
+              Only changed lines
+            </label>
+            <button
+              onClick={onClose}
+              className="text-zinc-500 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 min-h-0 flex">
@@ -165,6 +177,7 @@ export const TaskDiffModal = ({
                 </div>
               ) : (
                 <DiffEditor
+                  key={`${selectedFile.path}-${showChangedOnly}`}
                   theme="vs-dark"
                   language={language}
                   original={selectedFile.oldContent}
@@ -175,6 +188,9 @@ export const TaskDiffModal = ({
                     minimap: { enabled: false },
                     fontSize: 12,
                     wordWrap: "on",
+                    hideUnchangedRegions: showChangedOnly
+                      ? { enabled: true, contextLineCount: 3, minimumLineCount: 3 }
+                      : { enabled: false },
                   }}
                 />
               )
