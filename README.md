@@ -158,9 +158,3 @@ MIT License
 
 - Built with [Tauri](https://tauri.app/)
 - Terminal powered by [portable-pty](https://github.com/wez/wezterm/tree/main/pty)
-- AI integration via [Google Gemini](https://ai.google.dev/)
-
-## Support
-
-For issues, questions, or suggestions:
-- Open an issue on [GitHub](https://github.com/developermarshak/desktop-prompter/issues)
